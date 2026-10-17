@@ -1,0 +1,194 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "79d42b06eb4f2f0715b82880f018065b",
+    "entities": [
+      {
+        "tableName": "evaluations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `workerId` TEXT NOT NULL, `workerName` TEXT NOT NULL, `area` TEXT NOT NULL, `employment` TEXT NOT NULL, `shift` TEXT NOT NULL, `startedAtMillis` INTEGER NOT NULL, `configurationVersion` TEXT NOT NULL, `attemptCount` INTEGER NOT NULL, `minWaitMillis` INTEGER NOT NULL, `maxWaitMillis` INTEGER NOT NULL, `responseWindowMillis` INTEGER NOT NULL, `status` TEXT NOT NULL, `syncStatus` TEXT NOT NULL, `meanReactionMillis` REAL, `responses` INTEGER, `anticipations` INTEGER, `omissions` INTEGER, `interruptionReason` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerName",
+            "columnName": "workerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "area",
+            "columnName": "area",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "employment",
+            "columnName": "employment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shift",
+            "columnName": "shift",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMillis",
+            "columnName": "startedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "configurationVersion",
+            "columnName": "configurationVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attemptCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minWaitMillis",
+            "columnName": "minWaitMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxWaitMillis",
+            "columnName": "maxWaitMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "responseWindowMillis",
+            "columnName": "responseWindowMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "meanReactionMillis",
+            "columnName": "meanReactionMillis",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "responses",
+            "columnName": "responses",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "anticipations",
+            "columnName": "anticipations",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omissions",
+            "columnName": "omissions",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "interruptionReason",
+            "columnName": "interruptionReason",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_evaluations_workerId",
+            "unique": false,
+            "columnNames": [
+              "workerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_evaluations_workerId` ON `${TABLE_NAME}` (`workerId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "attempts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`evaluationId` TEXT NOT NULL, `attemptIndex` INTEGER NOT NULL, `outcome` TEXT NOT NULL, `reactionNanos` INTEGER, PRIMARY KEY(`evaluationId`, `attemptIndex`), FOREIGN KEY(`evaluationId`) REFERENCES `evaluations`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "evaluationId",
+            "columnName": "evaluationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptIndex",
+            "columnName": "attemptIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reactionNanos",
+            "columnName": "reactionNanos",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "evaluationId",
+            "attemptIndex"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "evaluations",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "evaluationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '79d42b06eb4f2f0715b82880f018065b')"
+    ]
+  }
+}
