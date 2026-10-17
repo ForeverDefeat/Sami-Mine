@@ -1,0 +1,50 @@
+# Local documentation and design context
+*.[mM][dD]
+/docs/
+/IconSamiMine.png
+
+# IDE and machine-specific settings
+.idea/
+.vscode/
+*.iml
+local.properties
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build outputs and caches (keep the Gradle wrapper and shared configuration)
+.gradle/
+.kotlin/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.apks
+*.log
+*.hprof
+
+# Local environment, signing credentials and service credentials
+.env
+.env.*
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+key.properties
+credentials.json
+google-services.json
+
+# Runtime databases and temporary files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.tmp
+*.bak
+*~
