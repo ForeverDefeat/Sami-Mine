@@ -1,0 +1,24 @@
+{
+  "indexes": [
+    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "organizationId", "order": "ASCENDING" }, { "fieldPath": "role", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "organizationId", "order": "ASCENDING" }, { "fieldPath": "role", "order": "ASCENDING" },
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "wellbeingUid", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "organizationId", "order": "ASCENDING" }, { "fieldPath": "role", "order": "ASCENDING" }, { "fieldPath": "active", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "results", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "complete", "order": "ASCENDING" }, { "fieldPath": "startedAtMillis", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "tracking", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "startedAtMillis", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] }
+  ],
+  "fieldOverrides": [
+    { "collectionGroup": "results", "fieldPath": "summaryJson", "indexes": [] },
+    { "collectionGroup": "chunks", "fieldPath": "json", "indexes": [] }
+  ]
+}

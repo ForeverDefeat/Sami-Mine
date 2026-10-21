@@ -1,0 +1,17 @@
+{
+  "name": "samimine-firebase-pilot-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:rules": "npx --no-install firebase emulators:exec --project demo-samimine --only auth,firestore \"node --test scripts/firebase/rules.test.mjs\"",
+    "seed:emulator": "node scripts/firebase/seed.mjs --emulator",
+    "seed:dev": "node scripts/firebase/seed.mjs --project samimine-dev",
+    "deploy:rules": "npx --no-install firebase deploy --project samimine-dev --only firestore:rules,firestore:indexes"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "firebase": "13.0.0",
+    "firebase-admin": "14.5.0",
+    "firebase-tools": "15.34.0"
+  }
+}

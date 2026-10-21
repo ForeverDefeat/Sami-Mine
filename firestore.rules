@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Prototype rules for the fictitious-data pilot. Exercise rules.test.mjs before deployment.
+    function signedIn() { return request.auth != null; }
+    function user(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
+    function actor() { return user(request.auth.uid); }
+    function active() { return signedIn() && actor().active == true; }
+    function sameOrganization(uid) { return active() && user(uid).organizationId == actor().organizationId; }
+    function administrator() { return active() && actor().role == 'ADMIN'; }
+    function owner(uid) { return active() && request.auth.uid == uid && actor().role == 'WORKER'; }
+    function assigned(uid) {
+      return active() && actor().role == 'WELLBEING' && user(uid).role == 'WORKER'
+        && user(uid).active == true && user(uid).wellbeingUid == request.auth.uid
+        && user(uid).organizationId == actor().organizationId;
+    }
+    function validText(value, min, max) { return value is string && value.size() >= min && value.size() <= max; }
+    // Domain validators are shared by create and update; fields outside the schema are rejected.
+    function validUser(data, uid) {
+      return data.keys().hasAll(['uid', 'name', 'organizationId', 'role', 'active', 'area', 'employment', 'wellbeingUid'])
+        && data.keys().hasOnly(['uid', 'name', 'organizationId', 'role', 'active', 'area', 'employment', 'wellbeingUid'])
+        && data.uid == uid && validText(data.name, 1, 100) && validText(data.organizationId, 1, 100)
+        && data.role in ['WORKER', 'WELLBEING', 'ADMIN'] && data.active is bool
+        && validText(data.area, 0, 100) && validText(data.employment, 0, 100)
+        && (data.wellbeingUid == null || (data.wellbeingUid is string && data.wellbeingUid.size() <= 128));
+    }
+    function validAssignment(data) {
+      return data.wellbeingUid == null ||
+        (user(data.wellbeingUid).role == 'WELLBEING' && user(data.wellbeingUid).active == true
+          && user(data.wellbeingUid).organizationId == data.organizationId);
+    }
+    function validResult(data, uid) {
+      return data.keys().hasAll(['ownerUid', 'organizationId', 'kind', 'title', 'status', 'startedAtMillis', 'summaryJson', 'chunkCount', 'complete'])
+        && data.keys().hasOnly(['ownerUid', 'organizationId', 'kind', 'title', 'status', 'startedAtMillis', 'summaryJson', 'chunkCount', 'complete'])
+        && data.ownerUid == uid && data.organizationId == user(uid).organizationId
+        && data.kind in ['PVT', 'COGNITIVE', 'REPORT', 'ASSESSMENT']
+        && data.status in ['COMPLETED', 'INTERRUPTED', 'INCOMPLETE', 'INVALID', 'OMITTED']
+        && validText(data.title, 1, 100) && validText(data.summaryJson, 2, 200000)
+        && data.startedAtMillis is int && data.startedAtMillis >= 0
+        && data.chunkCount is int && data.chunkCount >= 0 && data.chunkCount <= 10000
+        && data.complete is bool;
+    }
+    function validChunk(data, chunkId, count) {
+      return data.keys().hasAll(['index', 'json']) && data.keys().hasOnly(['index', 'json'])
+        && data.index is int && data.index >= 0 && data.index < count && chunkId == string(data.index)
+        && validText(data.json, 2, 100000);
+    }
+    function validTracking(data, uid, result) {
+      return data.keys().hasAll(['ownerUid', 'organizationId', 'kind', 'status', 'startedAtMillis', 'receivedAt'])
+        && data.keys().hasOnly(['ownerUid', 'organizationId', 'kind', 'status', 'startedAtMillis', 'receivedAt'])
+        && data.ownerUid == uid && data.organizationId == result.organizationId && result.complete == true
+        && data.kind == result.kind && data.status == result.status && data.startedAtMillis == result.startedAtMillis
+        && data.receivedAt is timestamp && data.receivedAt == request.time;
+    }
+    match /users/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid ||
+        (sameOrganization(uid) && (administrator() || assigned(uid))));
+      allow list: if request.query.limit <= 50 && active() && resource.data.organizationId == actor().organizationId
+        && ((administrator() && resource.data.role in ['WORKER', 'WELLBEING']) ||
+          (actor().role == 'WELLBEING' && resource.data.role == 'WORKER' && resource.data.active == true && resource.data.wellbeingUid == request.auth.uid));
+      allow create, delete: if false;
+      allow update: if administrator() && sameOrganization(uid) && uid != request.auth.uid
+        && resource.data.role == 'WORKER' && validUser(request.resource.data, uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'area', 'employment', 'active', 'wellbeingUid'])
+        && validAssignment(request.resource.data);
+
+      match /results/{runId} {
+        allow get: if owner(uid) || (assigned(uid) && resource.data.complete == true);
+        allow list: if request.query.limit <= 25 && (owner(uid) || (assigned(uid) && resource.data.complete == true));
+        allow create: if owner(uid) && validResult(request.resource.data, uid) && request.resource.data.complete == false;
+        allow update: if owner(uid) && validResult(request.resource.data, uid)
+          && (request.resource.data == resource.data || (resource.data.complete == false && request.resource.data.complete == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['complete'])
+            && getAfter(/databases/$(database)/documents/users/$(uid)/tracking/$(runId)).data.ownerUid == uid));
+        allow delete: if false;
+        match /chunks/{chunkId} {
+          function result() { return get(/databases/$(database)/documents/users/$(uid)/results/$(runId)).data; }
+          allow get: if owner(uid) || (assigned(uid) && result().complete == true);
+          allow list: if request.query.limit <= 100 && (owner(uid) || (assigned(uid) && result().complete == true));
+          allow create: if owner(uid) && result().complete == false && validChunk(request.resource.data, chunkId, result().chunkCount);
+          allow update: if owner(uid) && validChunk(request.resource.data, chunkId, result().chunkCount) && request.resource.data == resource.data;
+          allow delete: if false;
+        }
+      }
+      match /tracking/{runId} {
+        function resultAfter() { return getAfter(/databases/$(database)/documents/users/$(uid)/results/$(runId)).data; }
+        allow get: if owner(uid) || (administrator() && sameOrganization(uid));
+        allow list: if request.query.limit <= 25 && (owner(uid) || (administrator() && sameOrganization(uid)));
+        allow create: if owner(uid) && validTracking(request.resource.data, uid, resultAfter());
+        allow update, delete: if false;
+      }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

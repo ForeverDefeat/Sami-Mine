@@ -1,23 +1,24 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.google.services)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
 
 android {
-    namespace = "com.example.samimine"
+    namespace = "dev.studios.samimine"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.example.samimine"
+        applicationId = "dev.studios.samimine"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "dev.studios.samimine.SamiMineTestRunner"
     }
 
     buildTypes {
@@ -34,9 +35,16 @@ android {
     buildFeatures {
         compose = true
     }
+    sourceSets.getByName("androidTest").assets.directories.add("$projectDir/schemas")
 }
 
 dependencies {
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.gson)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.room.runtime)

@@ -1,6 +1,14 @@
 # Local documentation and design context
 *.[mM][dD]
 /docs/
+# Versioned implementation documentation; other local design files remain excluded.
+!/docs/
+/docs/*
+!/docs/ARQUITECTURA_ACTUAL.md
+!/docs/GUIA_DEL_CODIGO.md
+!/docs/BATERIA_IMPLEMENTACION.md
+!/docs/FIREBASE_PILOTO.md
+!/README_DESARROLLO.md
 /IconSamiMine.png
 
 # IDE and machine-specific settings
@@ -13,6 +21,12 @@ Thumbs.db
 Desktop.ini
 
 # Build outputs and caches (keep the Gradle wrapper and shared configuration)
+node_modules/
+.local/
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
 .gradle/
 .kotlin/
 build/
@@ -38,6 +52,10 @@ keystore.properties
 key.properties
 credentials.json
 google-services.json
+service-account*.json
+*serviceAccount*.json
+application_default_credentials.json
+pilot-accounts-*.json
 
 # Runtime databases and temporary files
 *.db
