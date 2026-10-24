@@ -122,7 +122,8 @@ class BatteryScoringTest {
     }
 
     @Test fun questionnairesCannotBeEnabledByAuthorizationFlagAlone() {
-        assertEquals(9, BatteryCatalog.modules().size)
+        assertEquals(8, BatteryCatalog.modules().size)
+        assertFalse(BatteryCatalog.modules().any { it.id == "BORG" })
         assertTrue(InstrumentCatalog.definitions.all { !it.available })
         assertTrue(InstrumentCatalog.definitions.all { !it.copy(authorized = true).available })
         val fixture = InstrumentDefinition(InstrumentId.KSS, "fixture-v1", "es-PE", "Synthetic test instructions", "Synthetic test period",

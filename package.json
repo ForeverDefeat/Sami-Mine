@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "distribution:prepare": "node scripts/firebase/distribution.mjs prepare",
+    "distribution:publish": "node scripts/firebase/distribution.mjs publish",
+    "test:distribution": "node --test scripts/firebase/distribution.test.mjs",
     "test:rules": "npx --no-install firebase emulators:exec --project demo-samimine --only auth,firestore \"node --test scripts/firebase/rules.test.mjs\"",
     "seed:emulator": "node scripts/firebase/seed.mjs --emulator",
     "seed:dev": "node scripts/firebase/seed.mjs --project samimine-dev",

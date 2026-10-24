@@ -20,7 +20,8 @@ import java.util.Locale
 
 @Composable
 fun HomeScreen(worker: Worker, shift: Shift, start: () -> Unit,
-    instruments: List<InstrumentDefinition> = InstrumentCatalog.definitions, startBrief: () -> Unit = {}, enabled: Boolean = true) {
+    instruments: List<InstrumentDefinition> = InstrumentCatalog.definitions, startBrief: () -> Unit = {}, enabled: Boolean = true,
+    openBattery: (() -> Unit)? = null, hasPendingBattery: Boolean = false) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Surface(color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxWidth().padding(SamiDimens.Page), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -38,6 +39,11 @@ fun HomeScreen(worker: Worker, shift: Shift, start: () -> Unit,
         HorizontalDivider(color = Separator)
         Column(Modifier.padding(SamiDimens.Page), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             AdaptiveDataPair("TURNO", shift.label, "ÁREA", worker.area)
+            if (openBattery != null) ReferenceCard {
+                Text("BATERÍA GUIADA", style = SamiTextStyles.SectionLabel, color = BrandBlue)
+                Text("Completa las actividades configuradas para tu organización. Los pasos terminados se conservan.")
+                PrimaryAction(if (hasPendingBattery) "Continuar batería" else "Ver batería disponible", enabled = enabled, onClick = openBattery)
+            }
             ReferenceCard {
                 Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Box(Modifier.size(80.dp).clip(CircleShape).background(SoftBlue), contentAlignment = Alignment.Center) {

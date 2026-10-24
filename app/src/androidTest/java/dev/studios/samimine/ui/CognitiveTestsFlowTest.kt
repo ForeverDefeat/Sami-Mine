@@ -49,6 +49,20 @@ class CognitiveTestsFlowTest {
         compose.onNodeWithText("Comenzar prueba").assertIsDisplayed().performClick()
     }
 
+    private fun omissionWaitsForConfirmation(name: String, total: Int) {
+        home(name); completePractice(name)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Continuar prueba").fetchSemanticsNodes().isNotEmpty() }
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        compose.waitUntil(7_000) { SystemClock.uptimeMillis() >= deadline }
+        compose.onNodeWithText("$name · 1/$total").assertExists()
+        compose.onNodeWithText("Demostración completada").assertDoesNotExist()
+        compose.onNodeWithText("Continuar prueba").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("$name · 2/$total").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test fun flankerOmissionDoesNotAdvanceWithoutConfirmation() = omissionWaitsForConfirmation("Flecha central", 12)
+    @Test fun visualSearchOmissionDoesNotAdvanceWithoutConfirmation() = omissionWaitsForConfirmation("Busca la T", 8)
+
     @Test fun flankerBackgroundInterruptsInsteadOfAdvancing() {
         home("Flecha central"); completePractice("Flecha central")
         compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)

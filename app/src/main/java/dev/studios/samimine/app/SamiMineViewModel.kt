@@ -11,12 +11,13 @@ import dev.studios.samimine.domain.model.*
 import dev.studios.samimine.domain.repository.EvaluationRepository
 import dev.studios.samimine.domain.repository.CognitiveTestRepository
 import dev.studios.samimine.domain.repository.BatteryRepository
+import dev.studios.samimine.domain.repository.GuidedBatteryRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlin.random.Random
 import java.util.UUID
 
-enum class PvtPhase { WAITING, SIGNAL, SAVING, INTERRUPTED }
+enum class PvtPhase { WAITING, SIGNAL, SAVING, AWAITING_CONTINUE, INTERRUPTED }
 /** Estado de UI en memoria; Room conserva las sesiones, no el destino ni el perfil seleccionado. */
 data class AppState(
     val destination: Destination = Destination.IDENTIFICATION,
@@ -43,6 +44,12 @@ data class AppState(
     val assessmentHistory: List<AssessmentSession> = emptyList(),
     val assessmentReports: List<SelfReport> = emptyList(),
     val briefActive: Boolean = false,
+    val batteryDefinition: BatteryDefinition? = null,
+    val batteryMessage: String? = null,
+    val guidedRun: GuidedBatteryRun? = null,
+    val guidedRuns: List<GuidedBatteryRun> = emptyList(),
+    val guidedActive: Boolean = false,
+    val guidedDetail: Boolean = false,
 )
 
 /**
@@ -59,7 +66,12 @@ class SamiMineViewModel(
     private val cognitiveUptimeMillis: () -> Long = { android.os.SystemClock.uptimeMillis() },
     private val batteryRepository: BatteryRepository? = repository as? BatteryRepository,
     val instruments: List<InstrumentDefinition> = InstrumentCatalog.definitions,
+    private val organizationId: String = "local-demo",
+    private val batteryConfigLoader: suspend () -> Pair<BatteryDefinition?, String?> = { null to "Conéctate para descargar una batería publicada." },
 ) : ViewModel() {
+    private val guidedRepository = repository as? GuidedBatteryRepository
+    private var guidedHistoryJob: Job? = null
+    private var pauseGuidedRequested = false
     private val mutableState = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = mutableState.asStateFlow()
     private var engine: PvtEngine? = null
@@ -81,7 +93,7 @@ class SamiMineViewModel(
     private var referenceBound = false
     private var frameWatchdog: Job? = null
 
-    init { operation { repository.recoverInterrupted(); cognitiveRepository?.recoverCognitiveTests(); batteryRepository?.recoverAssessments(); mutableState.update { it.copy(ready = true) } } }
+    init { operation { repository.recoverInterrupted(); cognitiveRepository?.recoverCognitiveTests(); batteryRepository?.recoverAssessments(); guidedRepository?.recoverGuidedBatteries(); mutableState.update { it.copy(ready = true) } } }
 
     /**
      * Serializa escrituras mediante busy y conserva la acción original para reintentar.
@@ -106,7 +118,8 @@ class SamiMineViewModel(
             }
             if (state.value.error == null && interruptionRequested != null) persistInterruption()
             else if (state.value.error == null && cognitiveInterruptionRequested != null) persistCognitiveInterruption()
-            else if (state.value.error == null && associationExpired) finishAssociation()
+            else if (state.value.error == null && associationExpired) awaitAssociationConfirmation()
+            else if (state.value.error == null && pauseGuidedRequested) pauseGuided()
         }
     }
 
@@ -121,16 +134,33 @@ class SamiMineViewModel(
             operation { batteryRepository?.interruptAssessment(current.assessment!!.id, current.worker!!.id, "El usuario cerró sesión") }
         }
         withTimeoutOrNull(15_000) { state.first { !it.busy } } ?: return false
+        val guided = state.value.guidedRuns.firstOrNull { !it.terminal }
+        if (guided != null) {
+            try { guidedRepository?.setGuidedState(guided.id, guided.workerId, BatteryRunStatus.PAUSED) }
+            catch (_: Exception) { return false }
+        }
         return state.value.error == null
     }
     fun selectWorker(worker: Worker) {
         if (!state.value.ready || state.value.busy) return
         historyJob?.cancel()
         mutableState.update { it.copy(worker = worker, shift = null, history = emptyList(), evaluation = null, cognitiveHistory = emptyList(),
-            selfReportHistory = emptyList(), assessmentHistory = emptyList(), assessment = null, selfReport = null, briefActive = false, selectedTab = WorkerTab.HOME, activityOrigin = WorkerTab.HOME, destination = Destination.SHIFT) }
+            selfReportHistory = emptyList(), assessmentHistory = emptyList(), assessment = null, selfReport = null, briefActive = false,
+            guidedRun = null, guidedRuns = emptyList(), guidedActive = false, selectedTab = WorkerTab.HOME, activityOrigin = WorkerTab.HOME, destination = Destination.SHIFT) }
+        guidedHistoryJob?.cancel()
+        guidedHistoryJob = viewModelScope.launch {
+            guidedRepository?.guidedHistory(worker.id)?.collect { runs -> mutableState.update { it.copy(guidedRuns = runs) } }
+        }
+        refreshBatteryDefinition()
     }
     fun selectShift(shift: Shift) {
         if (state.value.busy || state.value.error != null || !state.value.ready) return
+        val pending = state.value.guidedRuns.firstOrNull { !it.terminal }
+        if (pending != null && pending.shift != shift) {
+            mutableState.update { it.copy(shift = pending.shift, guidedRun = pending, guidedActive = false,
+                batteryMessage = "Continúa o abandona la batería pendiente antes de cambiar de turno.", destination = Destination.BATTERY_OVERVIEW) }
+            return
+        }
         mutableState.update { it.copy(shift = shift, selectedTab = WorkerTab.HOME, activityOrigin = WorkerTab.HOME, destination = Destination.HOME) }
     }
     fun instructions() {
@@ -149,10 +179,11 @@ class SamiMineViewModel(
     private fun returnToTab(tab: WorkerTab) {
         val current = state.value
         if (!current.ready || current.busy || current.error != null || current.worker == null || current.shift == null) return
+        if (current.guidedActive) { pauseGuided(); return }
         val navigate = {
             historyJob?.cancel()
             mutableState.update { it.copy(destination = tab.destination, selectedTab = tab, activityOrigin = tab,
-                resultFromHistory = false, briefActive = false, assessment = null) }
+                resultFromHistory = false, briefActive = false, assessment = null, guidedDetail = false) }
             if (tab == WorkerTab.HISTORY) observeHistory()
         }
         if (current.briefActive && current.assessment?.status == "IN_PROGRESS") {
@@ -170,6 +201,10 @@ class SamiMineViewModel(
     fun changeShift() {
         val current = state.value
         if (!current.destination.isWorkerRoot || current.busy || current.error != null) return
+        current.guidedRuns.firstOrNull { !it.terminal }?.let { pending ->
+            openGuided(pending.id)
+            return
+        }
         historyJob?.cancel()
         mutableState.update { it.copy(destination = Destination.SHIFT, shift = null) }
     }
@@ -181,12 +216,15 @@ class SamiMineViewModel(
     }
     fun back() {
         if (state.value.busy || state.value.error != null) return
+        if ((state.value.guidedActive || state.value.guidedDetail) && state.value.destination in setOf(Destination.RESULT, Destination.COGNITIVE_RESULT, Destination.SELF_REPORT_RESULT)) {
+            finishActivityResult(); return
+        }
         when (state.value.destination) {
             Destination.PVT -> interrupt("El usuario abandonó la prueba")
             Destination.COGNITIVE_RUN -> interruptCognitive("El usuario abandonó la prueba")
             Destination.SHIFT -> changeWorker()
-            Destination.HOME -> mutableState.update { it.copy(destination = Destination.SHIFT) }
-            Destination.TESTS, Destination.QUESTIONNAIRES, Destination.HISTORY -> selectTab(WorkerTab.HOME)
+            Destination.HOME -> changeShift()
+            Destination.TESTS, Destination.QUESTIONNAIRES, Destination.HISTORY, Destination.RECOMMENDATIONS -> selectTab(WorkerTab.HOME)
             Destination.INSTRUCTIONS -> home()
             Destination.COGNITIVE_INSTRUCTIONS -> home()
             Destination.COGNITIVE_PRACTICE -> interruptCognitive("El usuario abandonó la práctica")
@@ -196,6 +234,7 @@ class SamiMineViewModel(
             Destination.QUESTIONNAIRE -> home()
             Destination.SELF_REPORT_RESULT, Destination.ASSESSMENT_RESULT -> if (state.value.resultFromHistory) history() else home()
             Destination.IDENTIFICATION -> Unit
+            Destination.BATTERY_OVERVIEW -> if (state.value.guidedRun?.terminal == false) pauseGuided() else home()
         }
     }
 
@@ -206,7 +245,9 @@ class SamiMineViewModel(
         interruptionRequested = null
         technicalInterruption = false
         operation {
-            useCases.start(evaluation)
+            val guided = current.guidedRun
+            if (current.guidedActive && guided != null) checkNotNull(guidedRepository).startGuidedPvt(guided.id, guided.nextStep, evaluation)
+            else useCases.start(evaluation)
             if (current.briefActive) batteryRepository?.linkAssessmentPvt(checkNotNull(current.assessment).id, evaluation.worker.id, evaluation.id)
             mutableState.update { it.copy(evaluation = evaluation, destination = Destination.PVT, resultFromHistory = false) }
             engine = PvtEngine(clock, evaluation.configuration.responseWindowMillis)
@@ -259,6 +300,10 @@ class SamiMineViewModel(
         operation {
             useCases.record(evaluation.id, attempt)
             if (interruptionRequested == null) {
+                if (attempt.outcome == AttemptOutcome.OMISSION) {
+                    mutableState.update { it.copy(phase = PvtPhase.AWAITING_CONTINUE) }
+                    return@operation
+                }
                 if (attempt.index == evaluation.configuration.attempts) {
                     useCases.finish(evaluation.id)
                     val saved = checkNotNull(repository.get(evaluation.id, evaluation.worker.id))
@@ -269,6 +314,21 @@ class SamiMineViewModel(
                     beginAttempt(attempt.index + 1)
                 }
             }
+        }
+    }
+
+    fun continuePvt(evaluationId: String, index: Int) {
+        val s = state.value
+        if (s.destination != Destination.PVT || s.phase != PvtPhase.AWAITING_CONTINUE ||
+            s.busy || s.error != null || !foreground || interruptionRequested != null ||
+            s.evaluation?.id != evaluationId || s.attemptNumber != index) return
+        val evaluation = s.evaluation
+        operation {
+            if (index == evaluation.configuration.attempts) {
+                useCases.finish(evaluationId)
+                val saved = checkNotNull(repository.get(evaluationId, evaluation.worker.id))
+                mutableState.update { it.copy(evaluation = saved, destination = Destination.RESULT) }
+            } else beginAttempt(index + 1)
         }
     }
 
@@ -288,6 +348,10 @@ class SamiMineViewModel(
         technicalInterruption = true
         interrupt("La prueba pasó a segundo plano o cambió la pantalla")
         interruptCognitive("La prueba pasó a segundo plano o cambió la pantalla")
+        if (state.value.guidedActive) {
+            pauseGuidedRequested = true
+            if (!state.value.busy && state.value.error == null) pauseGuided()
+        }
     }
 
     private fun persistInterruption() {
@@ -347,7 +411,9 @@ class SamiMineViewModel(
             calculationVersion = "descriptive-v2",
         )
         operation {
-            cognitiveRepositoryOrThrow().startCognitiveTest(session)
+            val guided = current.guidedRun
+            if (current.guidedActive && guided != null) checkNotNull(guidedRepository).startGuidedCognitive(guided.id, guided.nextStep, session)
+            else cognitiveRepositoryOrThrow().startCognitiveTest(session)
             mutableState.update { it.copy(cognitiveSession = session, cognitiveTrialPosition = 0, destination = Destination.COGNITIVE_PRACTICE, cognitivePhase = CognitivePhase.PRACTICE) }
             if (!foreground) interruptCognitive("La aplicación pasó a segundo plano al iniciar")
         }
@@ -457,7 +523,7 @@ class SamiMineViewModel(
                     while (isActive && !timed.expire(cognitiveUptimeMillis())) delay(1)
                     associationExpired = true
                     cognitiveResolved = true
-                    if (!state.value.busy && state.value.error == null) finishAssociation()
+                    if (!state.value.busy && state.value.error == null) awaitAssociationConfirmation()
                 }
             }
             return
@@ -500,28 +566,47 @@ class SamiMineViewModel(
         operation {
             cognitiveRepositoryOrThrow().saveCognitiveTrial(sessionId, record)
             if (cognitiveInterruptionRequested != null || !foreground) return@operation
-            val next = s.cognitiveTrialPosition + 1
-            if (s.cognitiveType == CognitiveTestType.DSST) {
-                if (associationExpired || associationEngine?.accepts(cognitiveUptimeMillis()) != true) return@operation
-                val trials = s.cognitiveTrials + CognitiveTrials.dsstTrial(next, checkNotNull(cognitiveSeed))
-                mutableState.update { it.copy(cognitiveTrialPosition = next, cognitiveTrials = trials) }
-                // Resume after busy is cleared so draw callbacks cannot be lost.
-                timer = viewModelScope.launch { yield(); beginCognitiveTrial() }
+            if (record.actualResponse == null && record.outcomeCode != "NO_GO_CORRECT_REJECTION") {
+                mutableState.update { it.copy(cognitivePhase = CognitivePhase.AWAITING_CONTINUE) }
                 return@operation
             }
-            val total = s.cognitiveTrials.size
-            if (next >= total) {
-                cognitiveRepositoryOrThrow().finishCognitiveTest(sessionId)
-                val saved = checkNotNull(cognitiveRepositoryOrThrow().getCognitiveTest(sessionId, s.worker!!.id))
-                if (cognitiveInterruptionRequested != null || !foreground) return@operation
-                mutableState.update { it.copy(cognitiveTrialPosition = next, cognitiveSession = saved, destination = Destination.COGNITIVE_RESULT, cognitiveFeedback = null, cognitivePhase = CognitivePhase.COMPLETED) }
-            } else {
-                val updated = cognitiveRepositoryOrThrow().getCognitiveTest(sessionId, state.value.worker!!.id)
-                if (cognitiveInterruptionRequested != null || !foreground) return@operation
-                mutableState.update { it.copy(cognitiveTrialPosition = next, cognitiveSession = updated, cognitiveFeedback = null) }
-                val gap = s.cognitiveTrials[s.cognitiveTrialPosition].interTrialDelayMillis ?: 0L
-                timer = viewModelScope.launch { delay(gap); beginCognitiveTrial() }
-            }
+            advanceCognitive(s, sessionId)
+        }
+    }
+
+    fun continueCognitive(sessionId: String, trialIndex: Int) {
+        val s = state.value
+        if (s.destination != Destination.COGNITIVE_RUN || s.busy || s.error != null || !foreground ||
+            cognitiveInterruptionRequested != null || sessionId != cognitiveSessionId ||
+            s.cognitiveTrials.getOrNull(s.cognitiveTrialPosition)?.index != trialIndex) return
+        if (s.cognitivePhase == CognitivePhase.AWAITING_FINISH) { finishAssociation(); return }
+        if (s.cognitivePhase != CognitivePhase.AWAITING_CONTINUE) return
+        operation { advanceCognitive(s, sessionId) }
+    }
+
+    private suspend fun advanceCognitive(s: AppState, sessionId: String) {
+        mutableState.update { it.copy(cognitivePhase = CognitivePhase.INTER_TRIAL) }
+        val next = s.cognitiveTrialPosition + 1
+        if (s.cognitiveType == CognitiveTestType.DSST) {
+            if (associationExpired || associationEngine?.accepts(cognitiveUptimeMillis()) != true) return
+            val trials = s.cognitiveTrials + CognitiveTrials.dsstTrial(next, checkNotNull(cognitiveSeed))
+            mutableState.update { it.copy(cognitiveTrialPosition = next, cognitiveTrials = trials) }
+            // Resume after busy is cleared so draw callbacks cannot be lost.
+            timer = viewModelScope.launch { yield(); beginCognitiveTrial() }
+            return
+        }
+        val total = s.cognitiveTrials.size
+        if (next >= total) {
+            cognitiveRepositoryOrThrow().finishCognitiveTest(sessionId)
+            val saved = checkNotNull(cognitiveRepositoryOrThrow().getCognitiveTest(sessionId, s.worker!!.id))
+            if (cognitiveInterruptionRequested != null || !foreground) return
+            mutableState.update { it.copy(cognitiveTrialPosition = next, cognitiveSession = saved, destination = Destination.COGNITIVE_RESULT, cognitiveFeedback = null, cognitivePhase = CognitivePhase.COMPLETED) }
+        } else {
+            val updated = cognitiveRepositoryOrThrow().getCognitiveTest(sessionId, state.value.worker!!.id)
+            if (cognitiveInterruptionRequested != null || !foreground) return
+            mutableState.update { it.copy(cognitiveTrialPosition = next, cognitiveSession = updated, cognitiveFeedback = null) }
+            val gap = s.cognitiveTrials[s.cognitiveTrialPosition].interTrialDelayMillis ?: 0L
+            timer = viewModelScope.launch { delay(gap); beginCognitiveTrial() }
         }
     }
 
@@ -577,6 +662,13 @@ class SamiMineViewModel(
         else -> if (state.value.cognitiveType == CognitiveTestType.DSST) "el dígito $code" else code?.toIntOrNull()?.let { "la casilla ${it + 1}" } ?: "no responder"
     }
 
+    private fun awaitAssociationConfirmation() {
+        if (!associationExpired || state.value.destination != Destination.COGNITIVE_RUN) return
+        timer?.cancel()
+        cognitiveEngine?.interrupt()
+        mutableState.update { it.copy(cognitivePhase = CognitivePhase.AWAITING_FINISH, stimulusVisible = false) }
+    }
+
     private fun finishAssociation() {
         val timed = associationEngine ?: return
         val id = cognitiveSessionId ?: return
@@ -598,6 +690,7 @@ class SamiMineViewModel(
 
     fun openInstrument(id: InstrumentId) {
         if (state.value.busy || state.value.error != null || !state.value.ready) return
+        if (id == InstrumentId.BORG) return
         mutableState.update { it.copy(activityOrigin = it.selectedTab, instrument = instruments.first { d -> d.id == id }, destination = Destination.QUESTIONNAIRE, resultFromHistory = false, briefActive = false) }
     }
 
@@ -626,7 +719,8 @@ class SamiMineViewModel(
             System.currentTimeMillis(), values, omitted, context, moment,
             if (!omitted && definition.id == InstrumentId.CHALDER && definition.scoringMethod == "AUTHORIZED_ORDINAL_SUM") values.values.sum() else null, definition.scoringMethod)
         operation {
-            checkNotNull(batteryRepository).saveSelfReport(report)
+            if (current.guidedActive && current.guidedRun != null) checkNotNull(guidedRepository).saveGuidedReport(current.guidedRun.id, current.guidedRun.nextStep, report)
+            else checkNotNull(batteryRepository).saveSelfReport(report)
             mutableState.update { it.copy(selfReport = report, destination = if (current.briefActive) Destination.INSTRUCTIONS else Destination.SELF_REPORT_RESULT) }
         }
     }
@@ -650,12 +744,134 @@ class SamiMineViewModel(
     }
 
     fun finishPvtResult() {
+        if (state.value.guidedActive || state.value.guidedDetail) { finishActivityResult(); return }
         val parent = state.value.assessment
         if (state.value.briefActive && parent != null) openAssessment(parent.id, false)
         else if (state.value.resultFromHistory) history() else home()
     }
 
-    fun restartPvt() { if (state.value.briefActive) startBrief() else instructions() }
+    fun restartPvt() { if (state.value.guidedActive) finishGuidedModule() else if (state.value.briefActive) startBrief() else instructions() }
+
+    fun refreshBatteryDefinition() {
+        viewModelScope.launch {
+            try {
+                val (definition, message) = batteryConfigLoader()
+                mutableState.update { it.copy(batteryDefinition = definition, batteryMessage = message) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                mutableState.update { it.copy(batteryMessage = "No se pudo descargar la configuración. Reintenta con conexión.") }
+            }
+        }
+    }
+    fun openBatteries() {
+        if (state.value.busy || state.value.error != null) return
+        val pending = state.value.guidedRuns.firstOrNull { !it.terminal }
+        if (pending != null) openGuided(pending.id)
+        else mutableState.update { it.copy(guidedRun = null, guidedActive = false, destination = Destination.BATTERY_OVERVIEW) }
+    }
+    fun startGuidedBrief() {
+        if (instruments.none { it.id == InstrumentId.KSS && it.available }) return
+        startGuided(BatteryDefinition.brief(organizationId, instruments))
+    }
+    fun startPublishedBattery() { state.value.batteryDefinition?.let(::startGuided) }
+    private fun startGuided(definition: BatteryDefinition) {
+        val current = state.value
+        if (current.busy || current.error != null || current.worker == null || current.shift == null || guidedRepository == null) return
+        current.guidedRuns.firstOrNull { !it.terminal }?.let { openGuided(it.id); return }
+        try { definition.validate(instruments) } catch (_: IllegalArgumentException) {
+            mutableState.update { it.copy(batteryMessage = "La batería contiene módulos no habilitados o incompatibles. Actualiza la aplicación.") }; return
+        }
+        val run = GuidedBatteryRun(UUID.randomUUID().toString(), current.worker.id, current.shift, System.currentTimeMillis(), definition)
+        operation {
+            guidedRepository.startGuided(run)
+            mutableState.update { it.copy(guidedRun = run, guidedActive = false, guidedDetail = false, briefActive = false, destination = Destination.BATTERY_OVERVIEW) }
+        }
+    }
+    fun openGuided(id: String) {
+        val uid = state.value.worker?.id ?: return
+        operation {
+            val run = checkNotNull(guidedRepository).refreshGuided(id, uid)
+            mutableState.update { it.copy(guidedRun = run, guidedActive = false, briefActive = false, destination = Destination.BATTERY_OVERVIEW) }
+        }
+    }
+    fun continueGuided() {
+        val current = state.value
+        val run = current.guidedRun ?: return
+        if (current.busy || current.error != null || run.terminal || run.shift != current.shift) return
+        try { run.definition.validate(instruments) } catch (_: IllegalArgumentException) {
+            mutableState.update { it.copy(batteryMessage = "La versión de este recorrido no es compatible. Actualiza la aplicación o consulta al administrador.") }; return
+        }
+        operation {
+            val saved = checkNotNull(guidedRepository).refreshGuided(run.id, run.workerId)
+            if (saved.terminal) { mutableState.update { it.copy(guidedRun = saved) }; return@operation }
+            guidedRepository.setGuidedState(run.id, run.workerId, BatteryRunStatus.IN_PROGRESS)
+            val active = checkNotNull(guidedRepository.guided(run.id, run.workerId))
+            val module = active.steps[active.nextStep].moduleId
+            mutableState.update { it.copy(guidedRun = active, guidedActive = true, briefActive = false,
+                resultFromHistory = false, evaluation = null, cognitiveSession = null, selfReport = null) }
+            when (module) {
+                "PVT" -> mutableState.update { it.copy(destination = Destination.INSTRUCTIONS) }
+                "KSS", "BORG", "CHALDER" -> mutableState.update { it.copy(instrument = instruments.first { d -> d.id.name == module }, destination = Destination.QUESTIONNAIRE) }
+                else -> {
+                    prepareGuidedCognitive(CognitiveTestType.valueOf(module))
+                }
+            }
+        }
+    }
+    private fun prepareGuidedCognitive(type: CognitiveTestType) {
+        val config = CognitiveTestConfig.forType(type)
+        cognitiveSeed = Random.nextLong()
+        cognitiveSessionId = UUID.randomUUID().toString()
+        technicalInterruption = false
+        cognitiveInterruptionRequested = null
+        associationExpired = false
+        timer?.cancel(); deadlineTimer?.cancel(); frameWatchdog?.cancel()
+        cognitiveEngine?.interrupt()
+        cognitiveResolved = true
+        associationEngine = if (type == CognitiveTestType.DSST) TimedAssociationEngine() else null
+        nBackPending = null
+        referenceBound = false
+        mutableState.update { it.copy(cognitiveType = type, cognitiveTrials = CognitiveTrials.generate(config, checkNotNull(cognitiveSeed)),
+            cognitiveTrialPosition = 0, cognitiveFeedback = null, cognitivePhase = CognitivePhase.INSTRUCTIONS,
+            destination = Destination.COGNITIVE_INSTRUCTIONS) }
+    }
+    fun finishGuidedModule() {
+        val run = state.value.guidedRun ?: return
+        openGuided(run.id)
+    }
+    fun finishActivityResult() {
+        if (state.value.guidedActive || state.value.guidedDetail) {
+            mutableState.update { it.copy(guidedDetail = false) }
+            finishGuidedModule()
+        } else if (state.value.resultFromHistory) history() else home()
+    }
+    fun openGuidedAttempt(attempt: BatteryAttempt) {
+        if (state.value.busy || state.value.error != null) return
+        mutableState.update { it.copy(guidedDetail = true, guidedActive = false) }
+        when (attempt.kind) {
+            "PVT" -> detail(attempt.runId)
+            "COGNITIVE" -> openCognitiveDetail(attempt.runId)
+            "REPORT" -> openReport(attempt.runId)
+        }
+    }
+    fun pauseGuided() {
+        if (state.value.busy || state.value.error != null) { pauseGuidedRequested = true; return }
+        pauseGuidedRequested = false
+        val run = state.value.guidedRun ?: return
+        timer?.cancel(); deadlineTimer?.cancel(); frameWatchdog?.cancel()
+        operation {
+            if (!run.terminal) checkNotNull(guidedRepository).setGuidedState(run.id, run.workerId, BatteryRunStatus.PAUSED)
+            val saved = checkNotNull(guidedRepository).guided(run.id, run.workerId)
+            mutableState.update { it.copy(guidedRun = saved, guidedActive = false, guidedDetail = false, briefActive = false, destination = Destination.HOME) }
+        }
+    }
+    fun abandonGuided() {
+        val run = state.value.guidedRun ?: return
+        operation {
+            checkNotNull(guidedRepository).setGuidedState(run.id, run.workerId, BatteryRunStatus.ABANDONED)
+            mutableState.update { it.copy(guidedRun = guidedRepository.guided(run.id, run.workerId), guidedActive = false) }
+        }
+    }
 
     fun technicalFailure(reason: String) {
         technicalInterruption = true

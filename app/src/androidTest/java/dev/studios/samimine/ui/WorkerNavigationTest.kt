@@ -21,7 +21,7 @@ class WorkerNavigationTest {
         compose.onNodeWithText("Volver").assertDoesNotExist()
     }
 
-    @Test fun fourTabsInstructionsQuestionnairesAndAndroidBack() {
+    @Test fun fiveTabsInstructionsQuestionnairesRecommendationsAndAndroidBack() {
         begin()
         compose.onNodeWithTag("tab-TESTS").performClick().assertIsSelected()
         compose.onNodeWithText("Flecha central").performScrollTo().performClick()
@@ -29,11 +29,17 @@ class WorkerNavigationTest {
         compose.onNodeWithText("Volver").performClick()
         compose.onNodeWithText("Flecha central").assertExists()
         compose.onNodeWithTag("tab-QUESTIONNAIRES").performClick()
+        compose.onNodeWithText("Esfuerzo físico · Borg 6–20").assertDoesNotExist()
         compose.onNodeWithText("Somnolencia actual · KSS").performScrollTo().performClick()
         compose.onNodeWithTag("tab-QUESTIONNAIRES").assertDoesNotExist()
         compose.onNodeWithText("PENDIENTE DE HABILITACIÓN").assertExists()
         compose.onNodeWithText("Volver al catálogo").performClick()
         compose.onNodeWithTag("tab-QUESTIONNAIRES").assertIsSelected()
+        compose.onNodeWithTag("tab-RECOMMENDATIONS").performClick().assertIsSelected()
+        compose.onNodeWithText("Antes de las pruebas").assertExists()
+        compose.onNodeWithText("Bienestar durante el turno").performScrollTo().assertIsDisplayed()
+        pressBack()
+        compose.onNodeWithTag("tab-HOME").assertIsSelected()
         compose.onNodeWithTag("tab-HISTORY").performClick().assertIsSelected()
         compose.onNodeWithText("Mi historial").assertExists()
         pressBack()

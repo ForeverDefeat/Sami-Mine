@@ -65,6 +65,24 @@ class CognitiveViewModelTest {
                 tick(config.responseWindowMillis - 1)
                 assertEquals(CognitivePhase.STIMULUS, model.state.value.cognitivePhase)
                 tick(1)
+                if (trial.expectedResponse != null) {
+                    assertEquals(CognitivePhase.AWAITING_CONTINUE, model.state.value.cognitivePhase)
+                    val position = model.state.value.cognitiveTrialPosition
+                    tick(60_000)
+                    assertEquals(position, model.state.value.cognitiveTrialPosition)
+                    assertEquals(Destination.COGNITIVE_RUN, model.state.value.destination)
+                    model.answerCognitive(store.session!!.id, trial.index, trial.expectedResponse, dispatcher.scheduler.currentTime)
+                    assertEquals(CognitivePhase.AWAITING_CONTINUE, model.state.value.cognitivePhase)
+                    model.continueCognitive("old-session", trial.index); tick()
+                    assertEquals(CognitivePhase.AWAITING_CONTINUE, model.state.value.cognitivePhase)
+                    model.continueCognitive(store.session!!.id, trial.index); tick()
+                    if (it < config.scoredTrials - 1) {
+                        val nextTrial = model.state.value.cognitiveTrials[model.state.value.cognitiveTrialPosition]
+                        val nextPosition = model.state.value.cognitiveTrialPosition
+                        model.continueCognitive(store.session!!.id, nextTrial.index); tick()
+                        assertEquals(nextPosition, model.state.value.cognitiveTrialPosition)
+                    }
+                }
                 if (it < config.scoredTrials - 1) tick(trial.interTrialDelayMillis!!)
             }
             assertEquals(Destination.COGNITIVE_RESULT, model.state.value.destination)
@@ -174,6 +192,10 @@ class CognitiveViewModelTest {
             tick(start + 59_999 - dispatcher.scheduler.currentTime)
             assertEquals(Destination.COGNITIVE_RUN, model.state.value.destination)
             tick(1)
+            assertEquals(CognitivePhase.AWAITING_FINISH, model.state.value.cognitivePhase)
+            tick(60_000)
+            assertEquals(Destination.COGNITIVE_RUN, model.state.value.destination)
+            model.continueCognitive(store.session!!.id, model.state.value.cognitiveTrials[model.state.value.cognitiveTrialPosition].index); tick()
             assertEquals(Destination.COGNITIVE_RESULT, model.state.value.destination)
             assertEquals(if (respond) 3 else 0, store.session!!.trials.count { !it.isPractice })
             assertEquals(60_000L, store.session!!.executionFinishedUptimeMillis!! - store.session!!.executionStartedUptimeMillis!!)
@@ -191,6 +213,8 @@ class CognitiveViewModelTest {
         assertNotNull(model.state.value.error)
         tick(60_000)
         model.retry(); tick()
+        assertEquals(CognitivePhase.AWAITING_FINISH, model.state.value.cognitivePhase)
+        model.continueCognitive(store.session!!.id, trial.index); tick()
         assertEquals(Destination.COGNITIVE_RESULT, model.state.value.destination)
         assertEquals(start + 60_000, store.session!!.executionFinishedUptimeMillis)
         assertEquals(1, store.session!!.trials.count { !it.isPractice })
@@ -210,6 +234,10 @@ class CognitiveViewModelTest {
             assertFalse(model.state.value.stimulusVisible)
             assertEquals(index, store.session!!.trials.count { !it.isPractice })
             tick(2_000)
+            if (index > 0) {
+                assertEquals(CognitivePhase.AWAITING_CONTINUE, model.state.value.cognitivePhase)
+                model.continueCognitive(store.session!!.id, trial.index); tick()
+            }
             if (index < 23) tick(trial.interTrialDelayMillis!!)
         }
         assertEquals(Destination.COGNITIVE_RESULT, model.state.value.destination)

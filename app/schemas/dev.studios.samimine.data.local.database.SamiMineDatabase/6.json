@@ -1,0 +1,797 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "d51ee6f5401cf03f12c59501288cdcf5",
+    "entities": [
+      {
+        "tableName": "evaluations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `workerId` TEXT NOT NULL, `workerName` TEXT NOT NULL, `area` TEXT NOT NULL, `employment` TEXT NOT NULL, `shift` TEXT NOT NULL, `startedAtMillis` INTEGER NOT NULL, `configurationVersion` TEXT NOT NULL, `attemptCount` INTEGER NOT NULL, `minWaitMillis` INTEGER NOT NULL, `maxWaitMillis` INTEGER NOT NULL, `responseWindowMillis` INTEGER NOT NULL, `status` TEXT NOT NULL, `syncStatus` TEXT NOT NULL, `meanReactionMillis` REAL, `responses` INTEGER, `anticipations` INTEGER, `omissions` INTEGER, `interruptionReason` TEXT, `calculationVersion` TEXT NOT NULL DEFAULT 'legacy-v1', `medianReactionMillis` REAL, `meanResponseSpeed` REAL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerName",
+            "columnName": "workerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "area",
+            "columnName": "area",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "employment",
+            "columnName": "employment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shift",
+            "columnName": "shift",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMillis",
+            "columnName": "startedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "configurationVersion",
+            "columnName": "configurationVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attemptCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minWaitMillis",
+            "columnName": "minWaitMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxWaitMillis",
+            "columnName": "maxWaitMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "responseWindowMillis",
+            "columnName": "responseWindowMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "meanReactionMillis",
+            "columnName": "meanReactionMillis",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "responses",
+            "columnName": "responses",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "anticipations",
+            "columnName": "anticipations",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omissions",
+            "columnName": "omissions",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "interruptionReason",
+            "columnName": "interruptionReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "calculationVersion",
+            "columnName": "calculationVersion",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'legacy-v1'"
+          },
+          {
+            "fieldPath": "medianReactionMillis",
+            "columnName": "medianReactionMillis",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "meanResponseSpeed",
+            "columnName": "meanResponseSpeed",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_evaluations_workerId",
+            "unique": false,
+            "columnNames": [
+              "workerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_evaluations_workerId` ON `${TABLE_NAME}` (`workerId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "attempts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`evaluationId` TEXT NOT NULL, `attemptIndex` INTEGER NOT NULL, `outcome` TEXT NOT NULL, `reactionNanos` INTEGER, PRIMARY KEY(`evaluationId`, `attemptIndex`), FOREIGN KEY(`evaluationId`) REFERENCES `evaluations`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "evaluationId",
+            "columnName": "evaluationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptIndex",
+            "columnName": "attemptIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reactionNanos",
+            "columnName": "reactionNanos",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "evaluationId",
+            "attemptIndex"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "evaluations",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "evaluationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "cognitive_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `workerId` TEXT NOT NULL, `workerName` TEXT NOT NULL, `area` TEXT NOT NULL, `employment` TEXT NOT NULL, `shift` TEXT NOT NULL, `testType` TEXT NOT NULL, `protocolVersion` TEXT NOT NULL, `configSnapshot` TEXT NOT NULL, `randomSeed` INTEGER NOT NULL, `startedAtMillis` INTEGER NOT NULL, `finishedAtMillis` INTEGER, `status` TEXT NOT NULL, `interruptionReason` TEXT, `calculationVersion` TEXT NOT NULL DEFAULT 'legacy-v1', `executionStartedUptimeMillis` INTEGER, `executionFinishedUptimeMillis` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerName",
+            "columnName": "workerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "area",
+            "columnName": "area",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "employment",
+            "columnName": "employment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shift",
+            "columnName": "shift",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "testType",
+            "columnName": "testType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "protocolVersion",
+            "columnName": "protocolVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "configSnapshot",
+            "columnName": "configSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "randomSeed",
+            "columnName": "randomSeed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMillis",
+            "columnName": "startedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finishedAtMillis",
+            "columnName": "finishedAtMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "interruptionReason",
+            "columnName": "interruptionReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "calculationVersion",
+            "columnName": "calculationVersion",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'legacy-v1'"
+          },
+          {
+            "fieldPath": "executionStartedUptimeMillis",
+            "columnName": "executionStartedUptimeMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "executionFinishedUptimeMillis",
+            "columnName": "executionFinishedUptimeMillis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_cognitive_sessions_workerId",
+            "unique": false,
+            "columnNames": [
+              "workerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cognitive_sessions_workerId` ON `${TABLE_NAME}` (`workerId`)"
+          },
+          {
+            "name": "index_cognitive_sessions_startedAtMillis",
+            "unique": false,
+            "columnNames": [
+              "startedAtMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cognitive_sessions_startedAtMillis` ON `${TABLE_NAME}` (`startedAtMillis`)"
+          }
+        ]
+      },
+      {
+        "tableName": "cognitive_trials",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sessionId` TEXT NOT NULL, `trialIndex` INTEGER NOT NULL, `isPractice` INTEGER NOT NULL, `stimulusCode` TEXT NOT NULL, `expectedResponse` TEXT, `actualResponse` TEXT, `outcomeCode` TEXT NOT NULL, `reactionTimeMillis` INTEGER, `onsetUptimeMillis` INTEGER, `responseUptimeMillis` INTEGER, `interTrialDelayMillis` INTEGER, PRIMARY KEY(`sessionId`, `trialIndex`), FOREIGN KEY(`sessionId`) REFERENCES `cognitive_sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trialIndex",
+            "columnName": "trialIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isPractice",
+            "columnName": "isPractice",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stimulusCode",
+            "columnName": "stimulusCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedResponse",
+            "columnName": "expectedResponse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "actualResponse",
+            "columnName": "actualResponse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "outcomeCode",
+            "columnName": "outcomeCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reactionTimeMillis",
+            "columnName": "reactionTimeMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "onsetUptimeMillis",
+            "columnName": "onsetUptimeMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "responseUptimeMillis",
+            "columnName": "responseUptimeMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "interTrialDelayMillis",
+            "columnName": "interTrialDelayMillis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sessionId",
+            "trialIndex"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_cognitive_trials_sessionId",
+            "unique": false,
+            "columnNames": [
+              "sessionId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cognitive_trials_sessionId` ON `${TABLE_NAME}` (`sessionId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "cognitive_sessions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sessionId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "assessment_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `workerId` TEXT NOT NULL, `shift` TEXT NOT NULL, `startedAtMillis` INTEGER NOT NULL, `status` TEXT NOT NULL, `pvtId` TEXT, `finishedAtMillis` INTEGER, `reason` TEXT, `bundleVersion` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shift",
+            "columnName": "shift",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMillis",
+            "columnName": "startedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pvtId",
+            "columnName": "pvtId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "finishedAtMillis",
+            "columnName": "finishedAtMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bundleVersion",
+            "columnName": "bundleVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_assessment_sessions_workerId",
+            "unique": false,
+            "columnNames": [
+              "workerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_assessment_sessions_workerId` ON `${TABLE_NAME}` (`workerId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "self_reports",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `workerId` TEXT NOT NULL, `shift` TEXT NOT NULL, `assessmentId` TEXT, `instrumentId` TEXT NOT NULL, `instrumentVersion` TEXT NOT NULL, `language` TEXT NOT NULL, `answeredAtMillis` INTEGER NOT NULL, `answersJson` TEXT NOT NULL, `omitted` INTEGER NOT NULL, `context` TEXT, `moment` TEXT, `total` INTEGER, `scoringMethod` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shift",
+            "columnName": "shift",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assessmentId",
+            "columnName": "assessmentId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "instrumentId",
+            "columnName": "instrumentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instrumentVersion",
+            "columnName": "instrumentVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "language",
+            "columnName": "language",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "answeredAtMillis",
+            "columnName": "answeredAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "answersJson",
+            "columnName": "answersJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "omitted",
+            "columnName": "omitted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "context",
+            "columnName": "context",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "moment",
+            "columnName": "moment",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "total",
+            "columnName": "total",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "scoringMethod",
+            "columnName": "scoringMethod",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_self_reports_workerId",
+            "unique": false,
+            "columnNames": [
+              "workerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_self_reports_workerId` ON `${TABLE_NAME}` (`workerId`)"
+          },
+          {
+            "name": "index_self_reports_assessmentId",
+            "unique": false,
+            "columnNames": [
+              "assessmentId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_self_reports_assessmentId` ON `${TABLE_NAME}` (`assessmentId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "metric_results",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`runId` TEXT NOT NULL, `key` TEXT NOT NULL, `value` REAL, `unit` TEXT NOT NULL, `denominator` INTEGER, `methodVersion` TEXT NOT NULL, PRIMARY KEY(`runId`, `key`))",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "runId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "denominator",
+            "columnName": "denominator",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "methodVersion",
+            "columnName": "methodVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "runId",
+            "key"
+          ]
+        }
+      },
+      {
+        "tableName": "sync_queue",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`kind` TEXT NOT NULL, `runId` TEXT NOT NULL, `workerId` TEXT NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `error` TEXT, PRIMARY KEY(`kind`, `runId`))",
+        "fields": [
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runId",
+            "columnName": "runId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "error",
+            "columnName": "error",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "kind",
+            "runId"
+          ]
+        }
+      },
+      {
+        "tableName": "battery_runs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `workerId` TEXT NOT NULL, `status` TEXT NOT NULL, `startedAtMillis` INTEGER NOT NULL, `snapshot` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMillis",
+            "columnName": "startedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshot",
+            "columnName": "snapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_battery_runs_workerId",
+            "unique": false,
+            "columnNames": [
+              "workerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_battery_runs_workerId` ON `${TABLE_NAME}` (`workerId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "battery_config_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`organizationId` TEXT NOT NULL, `snapshot` TEXT NOT NULL, PRIMARY KEY(`organizationId`))",
+        "fields": [
+          {
+            "fieldPath": "organizationId",
+            "columnName": "organizationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshot",
+            "columnName": "snapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "organizationId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd51ee6f5401cf03f12c59501288cdcf5')"
+    ]
+  }
+}

@@ -10,6 +10,7 @@ import dev.studios.samimine.data.local.database.SamiMineDatabase.Companion.MIGRA
 import dev.studios.samimine.data.local.database.SamiMineDatabase.Companion.MIGRATION_2_3
 import dev.studios.samimine.data.local.database.SamiMineDatabase.Companion.MIGRATION_3_4
 import dev.studios.samimine.data.local.database.SamiMineDatabase.Companion.MIGRATION_4_5
+import dev.studios.samimine.data.local.database.SamiMineDatabase.Companion.MIGRATION_5_6
 import dev.studios.samimine.data.remote.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.*
@@ -21,7 +22,7 @@ import java.security.MessageDigest
  */
 class AppContainer(private val context: Context) {
     private val database = Room.databaseBuilder(context.applicationContext, SamiMineDatabase::class.java, "samimine-demo.db")
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
     val repository = RoomEvaluationRepository(database)
     val useCases = EvaluationUseCases(repository)
     val clock = AndroidMonotonicClock()
@@ -39,7 +40,7 @@ class AppContainer(private val context: Context) {
     @Synchronized fun database(uid: String): SamiMineDatabase = userDatabases.getOrPut(uid) {
         val hash = MessageDigest.getInstance("SHA-256").digest(uid.toByteArray()).joinToString("") { "%02x".format(it) }
         Room.databaseBuilder(context.applicationContext, SamiMineDatabase::class.java, "samimine-user-$hash.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
     }
     fun sync(uid: String) = FirebaseSyncRepository(context.applicationContext, database(uid), firebaseAuth, firestore)
 }

@@ -44,7 +44,7 @@ fun WorkerCatalogScreen(
         verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text(if (questionnaires) "Cuestionarios" else "Pruebas", style = MaterialTheme.typography.headlineMedium)
         DemoLabel()
-        Text(if (questionnaires) "Esfuerzo físico y fatiga retrospectiva se consultan en su contexto; no forman parte del recorrido breve."
+        Text(if (questionnaires) "Cuestionarios de somnolencia actual y fatiga. Consulta sus instrucciones y disponibilidad antes de comenzar."
             else "Elige una actividad para ver sus instrucciones y comenzar.", style = MaterialTheme.typography.bodyMedium, color = MutedInk)
         val modules = BatteryCatalog.modules(instruments).filter { (it.kind == ModuleKind.QUESTIONNAIRE) == questionnaires }
         WorkerGrid(modules) { module, modifier ->

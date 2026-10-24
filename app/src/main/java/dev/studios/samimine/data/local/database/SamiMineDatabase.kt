@@ -9,6 +9,7 @@ import dev.studios.samimine.data.local.entity.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import dev.studios.samimine.data.local.dao.SyncDao
+import dev.studios.samimine.data.local.dao.GuidedBatteryDao
 
 /**
  * v1 PVT, v2 cognitivas, v3 intervalos, v4 batería, autorreportes y métricas versionadas.
@@ -16,14 +17,23 @@ import dev.studios.samimine.data.local.dao.SyncDao
  * Los JSON exportados en app/schemas permiten revisar cada versión del contrato SQLite.
  */
 @Database(entities = [EvaluationEntity::class, AttemptEntity::class, CognitiveSessionEntity::class, CognitiveTrialEntity::class,
-    AssessmentEntity::class, SelfReportEntity::class, MetricEntity::class, SyncEntry::class], version = 5, exportSchema = true)
+    AssessmentEntity::class, SelfReportEntity::class, MetricEntity::class, SyncEntry::class,
+    GuidedBatteryEntity::class, BatteryConfigCache::class], version = 6, exportSchema = true)
 abstract class SamiMineDatabase : RoomDatabase() {
     abstract fun sync(): SyncDao
     abstract fun evaluations(): EvaluationDao
     abstract fun cognitiveTests(): CognitiveTestDao
     abstract fun battery(): BatteryDao
+    abstract fun guided(): GuidedBatteryDao
 
     companion object {
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS battery_runs (id TEXT NOT NULL, workerId TEXT NOT NULL, status TEXT NOT NULL, startedAtMillis INTEGER NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(id))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_battery_runs_workerId ON battery_runs(workerId)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS battery_config_cache (organizationId TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(organizationId))")
+            }
+        }
         val MIGRATION_4_5: Migration = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS sync_queue (kind TEXT NOT NULL, runId TEXT NOT NULL, workerId TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL, error TEXT, PRIMARY KEY(kind, runId))")

@@ -83,18 +83,16 @@ class BriefViewModelTest {
         assertEquals(1, store.reports.size)
     }
 
-    @Test fun borgRequiresActivityAndMomentAndCannotBeOmitted() {
+    @Test fun borgIsOutsideScopeAndCannotStartOrSaveAQuestionnaire() {
         model.openInstrument(InstrumentId.BORG)
         model.submitReport(mapOf("fixture-question" to "8"), null, null); tick()
         assertTrue(store.reports.isEmpty())
         model.submitReport(emptyMap(), "Fixture task", "Fixture moment", omitted = true); tick()
         assertTrue(store.reports.isEmpty())
         model.submitReport(mapOf("fixture-question" to "8"), "Fixture task", "Fixture moment"); tick()
-        assertEquals(Destination.SELF_REPORT_RESULT, model.state.value.destination)
-        assertEquals(8, store.reports.single().answers["fixture-question"])
-        assertEquals("Fixture task", store.reports.single().context)
-        assertNull(store.reports.single().assessmentId)
-        assertNull(store.reports.single().total)
+        assertEquals(Destination.HOME, model.state.value.destination)
+        assertTrue(store.reports.isEmpty())
+        assertFalse(BatteryCatalog.modules(model.instruments).any { it.id == "BORG" })
     }
 
     @Test fun invalidOptionNeverCreatesSelfReport() {

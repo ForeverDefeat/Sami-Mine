@@ -23,10 +23,10 @@ fun InstructionsScreen(enabled: Boolean, start: () -> Unit) {
         ReferenceCard {
             Instruction(1, "Espera", "Mantén la vista en el centro. La señal aparecerá tras una espera variable de 2 a 5 segundos.")
             Instruction(2, "Toca al ver la señal", "Cuando aparezca el círculo azul, toca el botón de la parte inferior. Tienes hasta 3 segundos.")
-            Instruction(3, "Espera a que aparezca", "Si tocas antes de ver el círculo o no alcanzas a tocarlo, la actividad lo tendrá en cuenta.")
+            Instruction(3, "Espera a que aparezca", "Si tocas antes de ver el círculo, se registrará. Si no respondes a tiempo, pulsa Continuar prueba para seguir.")
         }
         Text("Esta práctica es demostrativa y no sirve para decidir si estás apto para trabajar.", style = MaterialTheme.typography.bodySmall, color = AuxiliaryInk)
-        IconMessage("3 señales · Menos de 1 minuto")
+        IconMessage("3 señales · Toca cuando aparezca el círculo")
     }
 }
 

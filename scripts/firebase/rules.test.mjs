@@ -9,6 +9,16 @@ const result = (extra = {}) => ({ ownerUid: 'a', organizationId: 'mine-a', kind:
   summaryJson: '{"metrics":{"responses":3}}', chunkCount: 1, complete: false, ...extra });
 const db = uid => env.authenticatedContext(uid).firestore();
 const resultPath = 'users/a/results/PVT_run';
+const configurationRoot = 'organizations/mine-a';
+const batteryDraft = (extra = {}) => ({ name: 'Batería de prueba', modules: ['PVT', 'DSST'], revision: 1, schemaVersion: 1, ...extra });
+const batteryVersion = (extra = {}) => ({ id: 'default', name: 'Batería de prueba', version: 1,
+  organizationId: 'mine-a', modules: ['PVT', 'DSST'], protocols: { PVT: 'demo-pvt-v1', DSST: 'experimental-dsst-v1' }, schemaVersion: 1, ...extra });
+async function publishConfiguration(client, value = batteryVersion()) {
+  const batch = writeBatch(client);
+  batch.set(doc(client, `${configurationRoot}/batteryVersions/${value.version}`), value);
+  batch.set(doc(client, `${configurationRoot}/batterySettings/active`), { version: value.version });
+  return batch.commit();
+}
 before(async () => {
   env = await initializeTestEnvironment({ projectId: 'demo-samimine', firestore: { rules: await readFile('firestore.rules', 'utf8') } });
 });
@@ -20,6 +30,43 @@ beforeEach(async () => {
     for (const p of [profile('a'), profile('b'), profile('c', 'WORKER', { wellbeingUid: null }), profile('well', 'WELLBEING'), profile('other-well', 'WELLBEING'), profile('admin', 'ADMIN'), profile('foreign', 'WELLBEING', { organizationId: 'other' })])
       await setDoc(doc(admin, `users/${p.uid}`), p);
   });
+});
+
+test('only same-organization administrators edit drafts; revision conflicts and malformed modules fail', async () => {
+  const path = `${configurationRoot}/batteryDrafts/default`;
+  for (const uid of ['a', 'well', 'foreign', 'unknown']) await assertFails(setDoc(doc(db(uid), path), batteryDraft()));
+  await assertSucceeds(setDoc(doc(db('admin'), path), batteryDraft()));
+  await assertFails(getDoc(doc(db('a'), path)));
+  await assertFails(setDoc(doc(db('admin'), path), batteryDraft()));
+  for (const extra of [{ modules: [] }, { modules: ['PVT', 'PVT'] }, { modules: ['UNKNOWN'] },
+    { modules: ['BORG'] }, { schemaVersion: 2 }, { name: '' }, { extra: true }, { revision: 5 }]) {
+    await assertFails(setDoc(doc(db('admin'), path), batteryDraft({ revision: 2, ...extra })));
+  }
+  await assertSucceeds(setDoc(doc(db('admin'), path), batteryDraft({ revision: 2, modules: ['DSST', 'PVT'] })));
+});
+
+test('publication and active pointer are atomic, immutable, organization isolated and strictly versioned', async () => {
+  const admin = db('admin');
+  await assertSucceeds(setDoc(doc(admin, `${configurationRoot}/batteryDrafts/default`), batteryDraft()));
+  await assertFails(setDoc(doc(admin, `${configurationRoot}/batteryVersions/1`), batteryVersion()));
+  await assertFails(setDoc(doc(admin, `${configurationRoot}/batterySettings/active`), { version: 1 }));
+  await assertSucceeds(publishConfiguration(admin));
+  await assertSucceeds(getDoc(doc(db('a'), `${configurationRoot}/batteryVersions/1`)));
+  await assertFails(getDoc(doc(db('foreign'), `${configurationRoot}/batteryVersions/1`)));
+  await assertFails(updateDoc(doc(admin, `${configurationRoot}/batteryVersions/1`), { name: 'Changed' }));
+  await assertFails(deleteDoc(doc(admin, `${configurationRoot}/batteryVersions/1`)));
+  await assertFails(publishConfiguration(admin, batteryVersion({ version: 3 })));
+  await assertFails(publishConfiguration(db('a'), batteryVersion({ version: 2 })));
+  await assertFails(publishConfiguration(admin, batteryVersion({ version: 2, protocols: { PVT: 'unknown', DSST: 'experimental-dsst-v1' } })));
+  await assertSucceeds(publishConfiguration(admin, batteryVersion({ version: 2 })));
+  await assertFails(setDoc(doc(admin, `${configurationRoot}/batterySettings/active`), { version: 1 }));
+});
+
+test('unapproved questionnaire publication is denied even when the caller bypasses app validation', async () => {
+  const admin = db('admin');
+  await assertSucceeds(setDoc(doc(admin, `${configurationRoot}/batteryDrafts/default`), batteryDraft({ modules: ['KSS', 'PVT'] })));
+  await assertFails(publishConfiguration(admin, batteryVersion({ modules: ['KSS', 'PVT'], protocols: { KSS: 'invented', PVT: 'demo-pvt-v1' } })));
+  await assertFails(setDoc(doc(admin, 'instrument_catalog/KSS'), { approved: true, version: 'invented' }));
 });
 async function draft() { await assertSucceeds(setDoc(doc(db('a'), resultPath), result())); }
 async function finalize() {

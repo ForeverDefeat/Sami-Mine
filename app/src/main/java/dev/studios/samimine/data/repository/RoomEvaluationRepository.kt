@@ -15,7 +15,8 @@ import kotlinx.coroutines.flow.map
  * Dentro de transacciones compara datos existentes: IGNORE no basta para detectar conflictos.
  * Conserva orden de intentos/ensayos y no confirma sesiones con registros faltantes.
  */
-class RoomEvaluationRepository(private val database: SamiMineDatabase) : EvaluationRepository, CognitiveTestRepository, BatteryRepository {
+class RoomEvaluationRepository(private val database: SamiMineDatabase) : EvaluationRepository, CognitiveTestRepository, BatteryRepository,
+    dev.studios.samimine.domain.repository.GuidedBatteryRepository by RoomGuidedBatteryRepository(database) {
     private val dao = database.evaluations()
     override suspend fun recoverInterrupted() = database.withTransaction { dao.recover("La aplicación se cerró durante la prueba"); enqueueClosed() }
 

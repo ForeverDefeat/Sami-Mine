@@ -74,9 +74,9 @@ data class InstrumentDefinition(
         (id != InstrumentId.CHALDER || scoringMethod in setOf("AUTHORIZED_ORDINAL_SUM", "ORDINAL_ONLY"))
 }
 
-/** No scale wording or permissions have been supplied: all three remain unavailable. */
+/** Borg is retained in InstrumentId for historical records, but is outside the current study scope. */
 object InstrumentCatalog {
-    val definitions: List<InstrumentDefinition> = InstrumentId.entries.map {
+    val definitions: List<InstrumentDefinition> = InstrumentId.entries.filterNot { it == InstrumentId.BORG }.map {
         InstrumentDefinition(it, "", "es-PE", "", "", emptyList(), false, null, null)
     }
 }
@@ -92,7 +92,7 @@ object BatteryCatalog {
             CognitiveTestType.VISUAL_SEARCH -> "Encuentra la T entre las L"
             CognitiveTestType.DSST -> "Asocia seis símbolos con sus dígitos durante 60 segundos"
             CognitiveTestType.N_BACK -> "Compara cada símbolo con el anterior"
-        }, ModuleKind.COGNITIVE, it.version, true) } + instruments.map {
+        }, ModuleKind.COGNITIVE, it.version, true) } + instruments.filterNot { it.id == InstrumentId.BORG }.map {
             BatteryModule(it.id.name, it.id.label, if (it.available) it.recallPeriod else "Pendiente de versión autorizada en español", ModuleKind.QUESTIONNAIRE, it.version, it.available)
         }
 }

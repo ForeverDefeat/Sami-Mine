@@ -171,7 +171,7 @@ class RoomEvaluationRepositoryTest {
         legacy.close()
 
         val migrated = Room.databaseBuilder(context, SamiMineDatabase::class.java, legacyName)
-            .addMigrations(SamiMineDatabase.MIGRATION_1_2, SamiMineDatabase.MIGRATION_2_3, SamiMineDatabase.MIGRATION_3_4, SamiMineDatabase.MIGRATION_4_5).build()
+            .addMigrations(SamiMineDatabase.MIGRATION_1_2, SamiMineDatabase.MIGRATION_2_3, SamiMineDatabase.MIGRATION_3_4, SamiMineDatabase.MIGRATION_4_5, SamiMineDatabase.MIGRATION_5_6).build()
         try {
             val saved = RoomEvaluationRepository(migrated).get("legacy-pvt", "a")!!
             assertEquals(EvaluationStatus.COMPLETED, saved.status)

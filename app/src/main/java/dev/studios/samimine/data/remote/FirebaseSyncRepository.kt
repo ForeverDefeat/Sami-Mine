@@ -8,6 +8,7 @@ import com.google.gson.*
 import dev.studios.samimine.data.local.database.SamiMineDatabase
 import dev.studios.samimine.data.local.entity.SyncEntry
 import dev.studios.samimine.domain.model.UserRole
+import dev.studios.samimine.domain.model.BatteryRunStatus
 import dev.studios.samimine.domain.repository.SyncRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
@@ -64,6 +65,15 @@ class FirebaseSyncRepository(
                 root = gson.toJsonTree(item).asJsonObject; rows = emptyList()
                 title = "Recorrido breve"; status = item.status; started = item.startedAtMillis
             }
+            "BATTERY" -> {
+                val item = checkNotNull(database.guided().get(entry.runId, entry.workerId)).toDomain()
+                check(item.terminal)
+                root = gson.toJsonTree(item).asJsonObject
+                rows = root.remove("steps").asJsonArray.toList()
+                title = item.definition.name
+                status = if (item.status == BatteryRunStatus.COMPLETED) "COMPLETED" else "ABANDONED"
+                started = item.startedAtMillis
+            }
             else -> error("Tipo de envío desconocido")
         }
         // Bound each document well below Firestore's limit, including exceptionally long sessions.
@@ -95,8 +105,16 @@ class FirebaseSyncRepository(
         }
         if (profile.role != UserRole.WORKER) return true
         var allDelivered = true
-        for (entry in entries) {
+        for (entry in entries.sortedBy { if (it.kind == "BATTERY") 1 else 0 }) {
             if (auth.currentUser?.uid != uid) break
+            if (entry.kind == "BATTERY") {
+                val run = checkNotNull(database.guided().get(entry.runId, uid)).toDomain()
+                if (run.steps.flatMap { it.attempts }.any { database.sync().state(it.kind, it.runId, uid) != "SYNCED" }) {
+                    database.sync().update(entry.kind, entry.runId, "PENDING", "Esperando confirmación de los módulos vinculados")
+                    allDelivered = false
+                    continue
+                }
+            }
             database.sync().update(entry.kind, entry.runId, "SENDING", increment = 1)
             try {
                 val payload = payload(entry)

@@ -22,6 +22,7 @@ data class AccessState(
     val selectedWorker: UserProfile? = null, val runs: List<RemoteRun> = emptyList(),
     val detail: RemoteRun? = null, val detailChunks: List<String> = emptyList(),
     val moreWorkers: Boolean = false, val moreRuns: Boolean = false,
+    val detailParents: List<RemoteRun> = emptyList(), val notice: String? = null, val profileSaveVersion: Int = 0,
 )
 
 class AccessViewModel(private val context: Context, val container: AppContainer) : ViewModel() {
@@ -30,6 +31,7 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
     private var generation = 0
     private var actionJob: Job? = null
     private var lastRun: DocumentSnapshot? = null
+    private var retryAction: (suspend () -> Unit)? = null
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { refreshAccess() }
@@ -41,15 +43,24 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
     }
     private fun launchAction(action: suspend () -> Unit) {
         if (mutableState.value.loading) return
+        mutableState.update { it.copy(loading = true, error = null, notice = null) }
+        retryAction = action
         actionJob = viewModelScope.launch {
-            mutableState.update { it.copy(loading = true, error = null) }
-            try { action() }
+            try { action(); retryAction = null }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
-                mutableState.update { it.copy(error = message(failure), workers = emptyList(), runs = emptyList(), detail = null, detailChunks = emptyList()) }
+                mutableState.update { if (failure is FirebaseFirestoreException && failure.code == FirebaseFirestoreException.Code.PERMISSION_DENIED)
+                    it.copy(error = message(failure), workers = emptyList(), selectedWorker = null, runs = emptyList(), detail = null, detailChunks = emptyList(), detailParents = emptyList())
+                    else it.copy(error = message(failure)) }
                 if (failure is AccessDenied) blockAccess()
             } finally { mutableState.update { it.copy(loading = false) } }
         }
+    }
+    fun retryManagement() { retryAction?.let(::launchAction) ?: refreshWorkers() }
+    fun clearManagementFeedback() {
+        if (state.value.loading) return
+        retryAction = null
+        mutableState.update { it.copy(error = null, notice = null) }
     }
     fun login(email: String, password: String) {
         launchAction {
@@ -88,7 +99,7 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
             val currentGeneration = generation
             if (!context.isOnline()) {
                 mutableState.update { it.copy(session = session.copy(offline = true),
-                    workers = emptyList(), runs = emptyList(), detail = null, detailChunks = emptyList()) }
+                    workers = emptyList(), selectedWorker = it.selectedWorker.takeIf { session.profile.role == UserRole.ADMIN }, runs = emptyList(), detail = null, detailChunks = emptyList(), detailParents = emptyList()) }
                 return@launch
             }
             try {
@@ -97,18 +108,21 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
                 container.sessionCache.save(profile)
                 mutableState.update { it.copy(session = UserSession(profile)) }
                 if (profile.role == UserRole.WORKER && session.offline) container.sync(profile.uid).schedule(profile.uid)
-                if (profile.role != UserRole.WORKER && session.offline && !state.value.loading) refreshWorkers()
+                if (profile.role != UserRole.WORKER && session.offline && !state.value.loading) {
+                    if (state.value.selectedWorker != null) refreshRuns() else refreshWorkers()
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
                 if (currentGeneration != generation) return@launch
                 if (failure is AccessDenied || (failure is FirebaseFirestoreException && failure.code == FirebaseFirestoreException.Code.PERMISSION_DENIED)) blockAccess()
-                else mutableState.update { it.copy(session = session.copy(offline = true), workers = emptyList(), runs = emptyList(), detail = null, detailChunks = emptyList()) }
+                else mutableState.update { it.copy(session = session.copy(offline = true), workers = emptyList(), selectedWorker = it.selectedWorker.takeIf { session.profile.role == UserRole.ADMIN }, runs = emptyList(), detail = null, detailChunks = emptyList(), detailParents = emptyList()) }
             }
         }
     }
     private fun blockAccess() {
         val uid = state.value.session?.profile?.uid
         generation++
+        retryAction = null
         actionJob?.cancel()
         if (uid != null) WorkManager.getInstance(context).cancelAllWorkByTag("account-$uid")
         container.sessionCache.clear(); container.auth.signOut()
@@ -140,9 +154,11 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
         val subscription = container.firestore.collection("users").document(selected.uid).addSnapshotListener { snapshot, failure ->
             if (version != generation || container.auth.currentUid != session.profile.uid) return@addSnapshotListener
             val serverProfile = snapshot?.takeIf { !it.metadata.isFromCache }?.let { runCatching { it.toProfile() }.getOrNull() }
-            if (failure != null || (serverProfile != null && (!serverProfile.active || serverProfile.wellbeingUid != session.profile.uid))) {
+            if (failure != null || (snapshot != null && !snapshot.metadata.isFromCache &&
+                    (serverProfile == null || !serverProfile.active || serverProfile.wellbeingUid != session.profile.uid))) {
                 actionJob?.cancel()
-                mutableState.update { it.copy(selectedWorker = null, runs = emptyList(), detail = null, detailChunks = emptyList(),
+                retryAction = null
+                mutableState.update { it.copy(selectedWorker = null, runs = emptyList(), detail = null, detailChunks = emptyList(), detailParents = emptyList(),
                     workers = it.workers.filterNot { person -> person.uid == selected.uid }, loading = false,
                     error = "La asignación cambió. Actualiza la lista de trabajadores.") }
             }
@@ -165,16 +181,17 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
         val page = container.users.workers(profile, if (more) state.value.workers.lastOrNull()?.uid else null)
         val wellbeing = if (profile.role == UserRole.ADMIN) container.users.wellbeing(profile) else emptyList()
         mutableState.update { it.copy(workers = if (more) it.workers + page else page, wellbeing = wellbeing,
-            moreWorkers = page.size == 25, selectedWorker = null, runs = emptyList(), detail = null, detailChunks = emptyList()) }
+            moreWorkers = page.size == 25, selectedWorker = null, runs = emptyList(), detail = null, detailChunks = emptyList(), detailParents = emptyList()) }
     }
     fun selectWorker(worker: UserProfile) {
         launchAction {
             requireOnline(); lastRun = null
-            mutableState.update { it.copy(selectedWorker = worker, runs = emptyList(), detail = null, detailChunks = emptyList()) }
+            mutableState.update { it.copy(selectedWorker = worker, runs = emptyList(), detail = null, detailChunks = emptyList(), detailParents = emptyList()) }
             loadRuns(false)
         }
     }
     fun moreRuns() { launchAction { loadRuns(true) } }
+    fun refreshRuns() { launchAction { lastRun = null; loadRuns(false) } }
     private suspend fun loadRuns(more: Boolean) {
         val profile = requireOnline()
         val worker = checkNotNull(state.value.selectedWorker)
@@ -184,12 +201,15 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
         query = query.orderBy("startedAtMillis", Query.Direction.DESCENDING).orderBy(FieldPath.documentId()).limit(25)
         if (more && lastRun != null) query = query.startAfter(lastRun!!)
         val page = query.get(Source.SERVER).await().documents
+        if (state.value.selectedWorker?.uid != worker.uid || state.value.session?.offline != false || container.auth.currentUid != profile.uid) return
         lastRun = page.lastOrNull()
         val runs = page.map { RemoteRun(it.id, it.getString("kind") ?: "", it.getString("status") ?: "", it.getLong("startedAtMillis") ?: 0,
             if (admin) null else it.getString("summaryJson"), if (admin) null else it.getString("title")) }
         mutableState.update { it.copy(runs = if (more) it.runs + runs else runs, moreRuns = page.size == 25) }
     }
-    fun detail(run: RemoteRun) {
+    fun detail(run: RemoteRun, nested: Boolean = false, returning: Boolean = false) {
+        val parents = state.value.detailParents
+        val parent = state.value.detail
         launchAction {
             val profile = requireOnline(); check(profile.role == UserRole.WELLBEING)
             val worker = checkNotNull(state.value.selectedWorker)
@@ -204,7 +224,11 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
                 if (page.isNotEmpty()) lastIndex = page.last().getLong("index")!!
             } while (page.size == 100)
             check(chunks.size.toLong() == current.getLong("chunkCount"))
-            mutableState.update { it.copy(detail = run.copy(summaryJson = current.getString("summaryJson")), detailChunks = chunks) }
+            if (state.value.selectedWorker?.uid != worker.uid || state.value.session?.offline != false || container.auth.currentUid != profile.uid) return@launchAction
+            mutableState.update { it.copy(detail = RemoteRun(current.id, current.getString("kind") ?: run.kind,
+                current.getString("status") ?: run.status, current.getLong("startedAtMillis") ?: run.startedAtMillis,
+                current.getString("summaryJson"), current.getString("title")), detailChunks = chunks,
+                detailParents = if (returning) parents.dropLast(1) else if (nested && parent != null) parents + parent else emptyList()) }
         }
     }
     fun saveWorker(worker: UserProfile, name: String, area: String, employment: String, active: Boolean, wellbeingUid: String?) {
@@ -212,11 +236,24 @@ class AccessViewModel(private val context: Context, val container: AppContainer)
             check(requireOnline().role == UserRole.ADMIN)
             require(name.trim().length in 1..100 && area.length <= 100 && employment.length <= 100)
             container.users.updateWorker(worker.uid, name, area, employment, active, wellbeingUid)
-            loadWorkers(false)
+            val updated = worker.copy(name = name.trim(), area = area.trim(), employment = employment.trim(), active = active, wellbeingUid = wellbeingUid)
+            mutableState.update { it.copy(selectedWorker = updated, workers = it.workers.map { row -> if (row.uid == worker.uid) updated else row }, notice = "Perfil y asignación guardados", profileSaveVersion = it.profileSaveVersion + 1) }
         }
     }
-    fun backToWorkers() { mutableState.update { it.copy(selectedWorker = null, runs = emptyList(), detail = null, detailChunks = emptyList()) }; lastRun = null }
-    fun closeDetail() { mutableState.update { it.copy(detail = null, detailChunks = emptyList()) } }
+    fun backToWorkers() {
+        if (state.value.loading) return
+        val reload = state.value.workers.isEmpty() && state.value.session?.offline == false
+        retryAction = null
+        mutableState.update { it.copy(selectedWorker = null, runs = emptyList(), detail = null, detailChunks = emptyList(), detailParents = emptyList(), error = null, notice = null) }
+        lastRun = null
+        if (reload) refreshWorkers()
+    }
+    fun closeDetail() {
+        if (state.value.loading) return
+        val parent = state.value.detailParents.lastOrNull()
+        if (parent != null) detail(parent, returning = true)
+        else { retryAction = null; mutableState.update { it.copy(detail = null, detailChunks = emptyList(), detailParents = emptyList(), error = null) } }
+    }
     private suspend fun requireOnline(): UserProfile {
         val session = checkNotNull(state.value.session)
         val profile = container.users.profile(session.profile.uid)

@@ -1,5 +1,6 @@
 package dev.studios.samimine.app
 
+import androidx.lifecycle.viewModelScope
 import dev.studios.samimine.app.navigation.*
 import dev.studios.samimine.application.usecase.EvaluationUseCases
 import dev.studios.samimine.domain.evaluation.pvt.*
@@ -25,9 +26,35 @@ class SamiMineViewModelTest {
         model.selectShift(Shift.DAY)
         model.instructions()
     }
-    @After fun teardown() { Dispatchers.resetMain() }
+    @After fun teardown() { model.viewModelScope.cancel(); Dispatchers.resetMain() }
 
     private fun start() { model.start(); dispatcher.scheduler.runCurrent() }
+
+    @Test fun unansweredSignalsRequireExplicitContinuationEvenAtTheLastSignal() {
+        start()
+        val id = repository.value!!.id
+        repeat(3) { position ->
+            dispatcher.scheduler.advanceTimeBy(5_000); dispatcher.scheduler.runCurrent()
+            model.stimulusDrawn()
+            dispatcher.scheduler.advanceTimeBy(3_000); dispatcher.scheduler.runCurrent()
+            assertEquals(PvtPhase.AWAITING_CONTINUE, model.state.value.phase)
+            dispatcher.scheduler.advanceTimeBy(60_000); dispatcher.scheduler.runCurrent()
+            assertEquals(Destination.PVT, model.state.value.destination)
+            assertEquals(position + 1, model.state.value.attemptNumber)
+            assertEquals(position + 1, repository.value!!.attempts.size)
+            model.respond(id, position + 1)
+            model.continuePvt("old-evaluation", position + 1)
+            assertEquals(PvtPhase.AWAITING_CONTINUE, model.state.value.phase)
+            model.continuePvt(id, position + 1)
+            dispatcher.scheduler.runCurrent()
+            model.continuePvt(id, position + 1)
+            dispatcher.scheduler.runCurrent()
+        }
+        assertEquals(Destination.RESULT, model.state.value.destination)
+        assertEquals(3, repository.value!!.attempts.size)
+        assertTrue(repository.value!!.attempts.all { it.outcome == AttemptOutcome.OMISSION })
+        assertEquals(0, model.state.value.evaluation!!.metrics!!.responses)
+    }
 
     @Test fun failedWriteRetriesSameAttemptWithoutFalseResultOrDuplicate() {
         start()
@@ -112,6 +139,17 @@ class SamiMineViewModelTest {
         assertEquals(Destination.HOME, model.state.value.destination)
         model.back()
         assertEquals(Destination.SHIFT, model.state.value.destination)
+    }
+
+    @Test fun recommendationsOpenWithoutResultsAndBackReturnsHomeKeepingShift() {
+        val shift = model.state.value.shift
+        model.selectTab(WorkerTab.RECOMMENDATIONS)
+        assertEquals(Destination.RECOMMENDATIONS, model.state.value.destination)
+        assertEquals(WorkerTab.RECOMMENDATIONS, model.state.value.selectedTab)
+        assertTrue(model.state.value.history.isEmpty())
+        model.back()
+        assertEquals(Destination.HOME, model.state.value.destination)
+        assertEquals(shift, model.state.value.shift)
     }
 
     @Test fun pendingQuestionnaireReturnsToQuestionnairesAndChangingProfileClearsContext() {

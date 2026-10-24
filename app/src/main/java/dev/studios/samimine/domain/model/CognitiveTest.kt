@@ -11,7 +11,7 @@ enum class CognitiveTestType(val label: String, val version: String) {
 }
 
 enum class CognitiveSessionStatus { IN_PROGRESS, COMPLETED, INCOMPLETE, INVALID }
-enum class CognitivePhase { INSTRUCTIONS, PRACTICE, READY, REFERENCE, FIXATION, STIMULUS, INTER_TRIAL, COMPLETED, INCOMPLETE }
+enum class CognitivePhase { INSTRUCTIONS, PRACTICE, READY, REFERENCE, FIXATION, STIMULUS, INTER_TRIAL, AWAITING_CONTINUE, AWAITING_FINISH, COMPLETED, INCOMPLETE }
 
 /** Parámetros demostrativos versionados; forVersion conserva las ventanas de los protocolos v1. */
 data class CognitiveTestConfig(

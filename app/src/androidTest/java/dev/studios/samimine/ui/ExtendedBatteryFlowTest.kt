@@ -30,6 +30,9 @@ class ExtendedBatteryFlowTest {
 
     @Test fun associationStopsAfterMinuteWithoutInventingResponses() {
         practice("Símbolos y dígitos", "digit-1")
+        compose.waitUntil(70_000) { compose.onAllNodesWithText("El tiempo de la prueba ha terminado.").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Demostración completada").assertDoesNotExist()
+        compose.onNodeWithText("Ver resultado").performClick()
         compose.waitUntil(70_000) { compose.onAllNodesWithText("Demostración completada").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("metric-details").performScrollTo().performClick()
         compose.onNodeWithTag("metric-attempted").performScrollTo().assert(hasAnyDescendant(hasText("0")))
@@ -39,6 +42,12 @@ class ExtendedBatteryFlowTest {
 
     @Test fun memoryCompletesTwentyFourComparisonsWithoutInventingResponses() {
         practice("Recuerda el anterior")
+        repeat(24) { index ->
+            val label = if (index == 23) "Ver resultado" else "Continuar prueba"
+            compose.waitUntil(10_000) { compose.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Demostración completada").assertDoesNotExist()
+            compose.onNodeWithText(label).performClick()
+        }
         compose.waitUntil(95_000) { compose.onAllNodesWithText("Demostración completada").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("metric-details").performScrollTo().performClick()
         compose.onNodeWithTag("metric-omissions").performScrollTo().assert(hasAnyDescendant(hasText("24")))

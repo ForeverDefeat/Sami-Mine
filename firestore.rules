@@ -33,8 +33,10 @@ service cloud.firestore {
       return data.keys().hasAll(['ownerUid', 'organizationId', 'kind', 'title', 'status', 'startedAtMillis', 'summaryJson', 'chunkCount', 'complete'])
         && data.keys().hasOnly(['ownerUid', 'organizationId', 'kind', 'title', 'status', 'startedAtMillis', 'summaryJson', 'chunkCount', 'complete'])
         && data.ownerUid == uid && data.organizationId == user(uid).organizationId
-        && data.kind in ['PVT', 'COGNITIVE', 'REPORT', 'ASSESSMENT']
-        && data.status in ['COMPLETED', 'INTERRUPTED', 'INCOMPLETE', 'INVALID', 'OMITTED']
+        && data.kind in ['PVT', 'COGNITIVE', 'REPORT', 'ASSESSMENT', 'BATTERY']
+        && data.status in ['COMPLETED', 'INTERRUPTED', 'INCOMPLETE', 'INVALID', 'OMITTED', 'ABANDONED']
+        && (data.kind != 'BATTERY' || data.status in ['COMPLETED', 'ABANDONED'])
+        && (data.status != 'ABANDONED' || data.kind == 'BATTERY')
         && validText(data.title, 1, 100) && validText(data.summaryJson, 2, 200000)
         && data.startedAtMillis is int && data.startedAtMillis >= 0
         && data.chunkCount is int && data.chunkCount >= 0 && data.chunkCount <= 10000
@@ -88,6 +90,71 @@ service cloud.firestore {
         allow list: if request.query.limit <= 25 && (owner(uid) || (administrator() && sameOrganization(uid)));
         allow create: if owner(uid) && validTracking(request.resource.data, uid, resultAfter());
         allow update, delete: if false;
+      }
+    }
+    // Organization-scoped battery configuration. Catalog approvals are provisioned externally,
+    // never by the administration screen. Published versions cannot be rewritten or deleted.
+    function organizationReader(org) {
+      return active() && actor().organizationId == org && actor().role in ['WORKER', 'WELLBEING', 'ADMIN'];
+    }
+    function configurationAdmin(org) { return organizationReader(org) && administrator(); }
+    function validSelection(data) {
+      return validText(data.name, 1, 100) && data.modules is list && data.modules.size() >= 1 && data.modules.size() <= 8
+        && data.modules.toSet().size() == data.modules.size()
+        && data.modules.toSet().hasOnly(['KSS', 'PVT', 'FLANKER', 'GO_NO_GO', 'VISUAL_SEARCH', 'DSST', 'N_BACK', 'CHALDER'])
+        && data.schemaVersion == 1;
+    }
+    function validDraft(data) {
+      return data.keys().hasAll(['name', 'modules', 'revision', 'schemaVersion'])
+        && data.keys().hasOnly(['name', 'modules', 'revision', 'schemaVersion'])
+        && validSelection(data) && data.revision is int && data.revision > 0;
+    }
+    function protocolAllowed(data, id) {
+      let known = {'PVT': 'demo-pvt-v1', 'FLANKER': 'demo-flanker-v2', 'GO_NO_GO': 'demo-gonogo-v2',
+        'VISUAL_SEARCH': 'demo-visual-search-v1', 'DSST': 'experimental-dsst-v1', 'N_BACK': 'experimental-1back-v1'};
+      return !(id in data.modules) || (id in known ? data.protocols[id] == known[id] :
+        exists(/databases/$(database)/documents/instrument_catalog/$(id))
+        && get(/databases/$(database)/documents/instrument_catalog/$(id)).data.approved == true
+        && data.protocols[id] == get(/databases/$(database)/documents/instrument_catalog/$(id)).data.version);
+    }
+    function currentBatteryVersion(org) {
+      return exists(/databases/$(database)/documents/organizations/$(org)/batterySettings/active)
+        ? get(/databases/$(database)/documents/organizations/$(org)/batterySettings/active).data.version : 0;
+    }
+    function validPublished(data, org, version) {
+      return data.keys().hasAll(['id', 'name', 'version', 'organizationId', 'modules', 'protocols', 'schemaVersion'])
+        && data.keys().hasOnly(['id', 'name', 'version', 'organizationId', 'modules', 'protocols', 'schemaVersion'])
+        && data.id == 'default' && data.organizationId == org && data.version is int && data.version > 0
+        && string(data.version) == version && validSelection(data)
+        && data.protocols is map && data.protocols.keys().toSet() == data.modules.toSet()
+        && protocolAllowed(data, 'PVT') && protocolAllowed(data, 'FLANKER') && protocolAllowed(data, 'GO_NO_GO')
+        && protocolAllowed(data, 'VISUAL_SEARCH') && protocolAllowed(data, 'DSST') && protocolAllowed(data, 'N_BACK')
+        && protocolAllowed(data, 'KSS') && protocolAllowed(data, 'BORG') && protocolAllowed(data, 'CHALDER');
+    }
+    match /organizations/{org} {
+      match /batteryDrafts/{id} {
+        allow get: if configurationAdmin(org) && id == 'default';
+        allow create: if configurationAdmin(org) && id == 'default' && validDraft(request.resource.data) && request.resource.data.revision == 1;
+        allow update: if configurationAdmin(org) && id == 'default' && validDraft(request.resource.data)
+          && request.resource.data.revision == resource.data.revision + 1;
+        allow delete, list: if false;
+      }
+      match /batteryVersions/{version} {
+        allow get: if organizationReader(org);
+        allow create: if configurationAdmin(org) && validPublished(request.resource.data, org, version)
+          && request.resource.data.version == currentBatteryVersion(org) + 1
+          && getAfter(/databases/$(database)/documents/organizations/$(org)/batterySettings/active).data.version == request.resource.data.version
+          && request.resource.data.modules == getAfter(/databases/$(database)/documents/organizations/$(org)/batteryDrafts/default).data.modules
+          && request.resource.data.name == getAfter(/databases/$(database)/documents/organizations/$(org)/batteryDrafts/default).data.name;
+        allow update, delete, list: if false;
+      }
+      match /batterySettings/{id} {
+        allow get: if organizationReader(org) && id == 'active';
+        allow create, update: if configurationAdmin(org) && id == 'active'
+          && request.resource.data.keys().hasAll(['version']) && request.resource.data.keys().hasOnly(['version'])
+          && request.resource.data.version is int && request.resource.data.version == currentBatteryVersion(org) + 1
+          && existsAfter(/databases/$(database)/documents/organizations/$(org)/batteryVersions/$(string(request.resource.data.version)));
+        allow delete, list: if false;
       }
     }
     match /{document=**} { allow read, write: if false; }

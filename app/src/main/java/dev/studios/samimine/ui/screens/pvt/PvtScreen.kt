@@ -30,7 +30,7 @@ import dev.studios.samimine.ui.theme.*
  * PVT consulta su reloj al responder; no utiliza el uptime del evento que entrega el control.
  */
 @Composable
-fun PvtScreen(phase: PvtPhase, index: Int, total: Int, enabled: Boolean, drawn: () -> Unit, respond: () -> Unit) {
+fun PvtScreen(phase: PvtPhase, index: Int, total: Int, enabled: Boolean, drawn: () -> Unit, respond: () -> Unit, continueTest: () -> Unit = {}) {
     val gate = remember { ContactGate() }
     val currentRespond by rememberUpdatedState(respond)
     val currentDrawn by rememberUpdatedState(drawn)
@@ -70,11 +70,19 @@ fun PvtScreen(phase: PvtPhase, index: Int, total: Int, enabled: Boolean, drawn: 
                     Text(when (phase) {
                         PvtPhase.WAITING -> "Espera la señal"
                         PvtPhase.SAVING -> "Guardando respuesta…"
+                        PvtPhase.AWAITING_CONTINUE -> "No se registró una respuesta a tiempo"
                         else -> "Prueba interrumpida"
                     }, color = Color.White, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                     if (phase == PvtPhase.WAITING) Text("El círculo aparecerá pronto", color = TestRing, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
                 }
             }
+        }
+        if (phase == PvtPhase.AWAITING_CONTINUE) {
+            Text("Se guardó como señal sin respuesta. Pulsa para continuar.", color = Color.White, textAlign = TextAlign.Center)
+            Button(onClick = continueTest, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                Text(if (index == total) "Ver resultado" else "Continuar prueba")
+            }
+            return@Column
         }
         val label = if (phase == PvtPhase.SIGNAL) "TOCAR AHORA" else "ESPERA LA SEÑAL"
         Box(Modifier.fillMaxWidth().heightIn(min = SamiDimens.ResponseHeight).testTag("pvt-response").clip(SamiShapes.Card)

@@ -1,14 +1,26 @@
 # Local documentation and design context
 *.[mM][dD]
 /docs/
-# Versioned implementation documentation; other local design files remain excluded.
-!/docs/
-/docs/*
-!/docs/ARQUITECTURA_ACTUAL.md
-!/docs/GUIA_DEL_CODIGO.md
-!/docs/BATERIA_IMPLEMENTACION.md
-!/docs/FIREBASE_PILOTO.md
-!/README_DESARROLLO.md
+# Keep design and architecture material local.
+/.document-work/
+/design/
+/designs/
+/diseno/
+/architecture/
+/arquitectura/
+/diagrams/
+/diagramas/
+*.drawio
+*.drawio.*
+*.puml
+*.plantuml
+*.mermaid
+*.mmd
+*.fig
+*.sketch
+*.docx
+*.pptx
+*.pdf
 /IconSamiMine.png
 
 # IDE and machine-specific settings

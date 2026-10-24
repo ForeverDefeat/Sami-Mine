@@ -20,7 +20,7 @@ class BatteryPersistenceTest {
     private val name = "battery-${UUID.randomUUID()}.db"
     @Before fun setup() { open() }
     private fun open() {
-        database = Room.databaseBuilder(context, SamiMineDatabase::class.java, name).addMigrations(SamiMineDatabase.MIGRATION_3_4, SamiMineDatabase.MIGRATION_4_5).build()
+        database = Room.databaseBuilder(context, SamiMineDatabase::class.java, name).addMigrations(SamiMineDatabase.MIGRATION_3_4, SamiMineDatabase.MIGRATION_4_5, SamiMineDatabase.MIGRATION_5_6).build()
         repository = RoomEvaluationRepository(database)
     }
     @After fun cleanup() { database.close(); context.deleteDatabase(name) }

@@ -11,7 +11,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.studios.samimine.app.navigation.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import dev.studios.samimine.ui.screens.home.WorkerCatalogScreen
+import dev.studios.samimine.ui.screens.home.RecommendationsScreen
 import dev.studios.samimine.data.demo.DemoWorkers
 import dev.studios.samimine.domain.model.*
 import dev.studios.samimine.ui.components.*
@@ -74,7 +79,9 @@ fun SamiMineApp(model: SamiMineViewModel, lockedWorker: Worker? = null, signOut:
                             when (state.destination) {
                                 Destination.IDENTIFICATION -> IdentificationScreen(DemoWorkers.all, !state.busy && state.error == null, model::selectWorker)
                                 Destination.SHIFT -> ShiftScreen(state.worker!!, model::selectShift)
-                                Destination.HOME -> HomeScreen(state.worker!!, state.shift!!, model::instructions, model.instruments, model::startBrief, enabled)
+                                Destination.HOME -> HomeScreen(state.worker!!, state.shift!!, model::instructions, model.instruments, model::startGuidedBrief, enabled,
+                                    model::openBatteries, state.guidedRuns.any { !it.terminal })
+                                Destination.RECOMMENDATIONS -> RecommendationsScreen()
                                 Destination.TESTS, Destination.QUESTIONNAIRES -> WorkerCatalogScreen(
                                     state.destination == Destination.QUESTIONNAIRES, model.instruments, enabled,
                                     model::instructions, model::chooseCognitiveTest, model::openInstrument)
@@ -84,12 +91,14 @@ fun SamiMineApp(model: SamiMineViewModel, lockedWorker: Worker? = null, signOut:
                                     val index = state.attemptNumber
                                     PvtScreen(state.phase, index, state.evaluation!!.configuration.attempts,
                                         !state.busy && state.error == null,
-                                        { model.stimulusDrawn(evaluationId, index) }, { model.respond(evaluationId, index) })
+                                        { model.stimulusDrawn(evaluationId, index) }, { model.respond(evaluationId, index) },
+                                        { model.continuePvt(evaluationId, index) })
                                 }
                                 Destination.RESULT -> ResultScreen(state.evaluation!!, state.resultFromHistory, model::finishPvtResult, model::restartPvt,
-                                    if (state.briefActive) "Ver resumen del recorrido" else state.activityOrigin.returnLabel)
+                                    if (state.guidedActive) "Ver avance de la batería" else if (state.briefActive) "Ver resumen del recorrido" else state.activityOrigin.returnLabel)
                                 Destination.HISTORY -> HistoryScreen(state.worker!!, state.history, !state.busy && state.error == null, model::openCognitiveDetail, state.cognitiveHistory,
-                                    state.assessmentHistory, state.selfReportHistory, { model.openAssessment(it) }, model::openReport, model::detail)
+                                    state.assessmentHistory, state.selfReportHistory, { model.openAssessment(it) }, model::openReport,
+                                    state.guidedRuns, model::openGuided, model::detail)
                                 Destination.COGNITIVE_INSTRUCTIONS -> CognitiveInstructionsScreen(state.cognitiveType!!, model::home, model::beginCognitivePractice, !state.busy && state.error == null)
                                 Destination.COGNITIVE_PRACTICE -> {
                                     val sessionId = state.cognitiveSession!!.id
@@ -113,23 +122,27 @@ fun SamiMineApp(model: SamiMineViewModel, lockedWorker: Worker? = null, signOut:
                                     { model.cognitiveStimulusDrawn(sessionId, trialIndex, it) },
                                     { answer, time -> model.answerCognitive(sessionId, trialIndex, answer, time) },
                                     seed = state.cognitiveSession!!.randomSeed, stimulusVisible = state.stimulusVisible,
+                                    continueTest = { model.continueCognitive(sessionId, trialIndex) },
                                 )
                                 }
                                 Destination.COGNITIVE_RESULT -> state.cognitiveSession?.let { session ->
                                     CognitiveResultScreen(session, state.resultFromHistory,
-                                        { if (state.resultFromHistory) model.history() else model.home() },
-                                        { model.prepareCognitiveChoice(session.type) },
-                                        state.activityOrigin.returnLabel)
+                                        model::finishActivityResult,
+                                        { if (state.guidedActive) model.finishGuidedModule() else model.prepareCognitiveChoice(session.type) },
+                                        if (state.guidedActive) "Ver avance de la batería" else state.activityOrigin.returnLabel)
                                 }
                                 Destination.QUESTIONNAIRE -> state.instrument?.let { definition ->
                                     QuestionnaireScreen(definition, state.briefActive, !state.busy && state.error == null, model::submitReport, model::home)
                                 }
                                 Destination.SELF_REPORT_RESULT -> state.selfReport?.let { report ->
-                                    SelfReportResultScreen(report, state.resultFromHistory) { if (state.resultFromHistory) model.history() else model.home() }
+                                    SelfReportResultScreen(report, state.resultFromHistory, if (state.guidedActive) "Ver avance de la batería" else "Volver a cuestionarios", model::finishActivityResult)
                                 }
                                 Destination.ASSESSMENT_RESULT -> state.assessment?.let { parent ->
                                     AssessmentResultScreen(parent, state.assessmentReports, state.evaluation, state.resultFromHistory) { if (state.resultFromHistory) model.history() else model.home() }
                                 }
+                                Destination.BATTERY_OVERVIEW -> GuidedBatteryScreen(state.guidedRun, state.batteryDefinition, state.batteryMessage,
+                                    enabled, model::startPublishedBattery, model::continueGuided, model::pauseGuided, model::abandonGuided,
+                                    model::refreshBatteryDefinition, model::openGuidedAttempt)
                             }
                         }
                     }
@@ -141,18 +154,29 @@ fun SamiMineApp(model: SamiMineViewModel, lockedWorker: Worker? = null, signOut:
 
 @Composable
 internal fun WorkerNavigation(selected: WorkerTab, enabled: Boolean, select: (WorkerTab) -> Unit) {
+    val largeText = LocalDensity.current.fontScale > 1.25f
     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
         WorkerTab.entries.forEach { tab ->
             NavigationBarItem(
                 selected = selected == tab, enabled = enabled, onClick = { select(tab) },
-                modifier = Modifier.testTag("tab-${tab.name}"),
+                modifier = Modifier.testTag("tab-${tab.name}").semantics { contentDescription = tab.label },
                 icon = { Icon(when (tab) {
                     WorkerTab.HOME -> SamiIcons.Home
                     WorkerTab.TESTS -> SamiIcons.Grid
                     WorkerTab.QUESTIONNAIRES -> SamiIcons.Questionnaire
                     WorkerTab.HISTORY -> SamiIcons.Clock
+                    WorkerTab.RECOMMENDATIONS -> SamiIcons.Guidance
                 }, null) },
-                label = { Text(tab.label, style = MaterialTheme.typography.labelSmall) },
+                label = {
+                    val label = when (tab) {
+                        WorkerTab.HOME -> "Inicio"
+                        WorkerTab.TESTS -> if (largeText) "Tests" else "Pruebas"
+                        WorkerTab.QUESTIONNAIRES -> "Escalas"
+                        WorkerTab.HISTORY -> if (largeText) "Hist." else "Historial"
+                        WorkerTab.RECOMMENDATIONS -> if (largeText) "Guía" else "Consejos"
+                    }
+                    Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                },
                 colors = NavigationBarItemDefaults.colors(selectedIconColor = BrandBlue,
                     selectedTextColor = BrandBlue, indicatorColor = SoftBlue),
             )

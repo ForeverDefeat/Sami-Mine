@@ -32,7 +32,7 @@ class PilotPersistenceTest {
         legacy.execSQL("INSERT INTO assessment_sessions VALUES ('closed','a','DAY',100,'INCOMPLETE',NULL,200,'Demo','v1')")
         legacy.execSQL("INSERT INTO assessment_sessions VALUES ('open','a','DAY',100,'IN_PROGRESS',NULL,NULL,NULL,'v1')")
         legacy.version = 4; legacy.close()
-        val db = Room.databaseBuilder(context, SamiMineDatabase::class.java, name).addMigrations(SamiMineDatabase.MIGRATION_4_5).build()
+        val db = Room.databaseBuilder(context, SamiMineDatabase::class.java, name).addMigrations(SamiMineDatabase.MIGRATION_4_5, SamiMineDatabase.MIGRATION_5_6).build()
         try {
             assertNotNull(db.battery().assessment("closed", "a"))
             assertEquals(listOf("closed"), db.sync().pending("a").map { it.runId })

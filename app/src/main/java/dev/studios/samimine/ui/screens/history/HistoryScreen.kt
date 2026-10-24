@@ -14,7 +14,8 @@ import dev.studios.samimine.ui.theme.*
 
 @Composable
 fun HistoryScreen(worker: Worker, evaluations: List<Evaluation>, enabled: Boolean, openCognitive: (String) -> Unit = {}, cognitiveSessions: List<CognitiveTestSession> = emptyList(),
-    assessments: List<AssessmentSession> = emptyList(), reports: List<SelfReport> = emptyList(), openAssessment: (String) -> Unit = {}, openReport: (String) -> Unit = {}, open: (String) -> Unit) {
+    assessments: List<AssessmentSession> = emptyList(), reports: List<SelfReport> = emptyList(), openAssessment: (String) -> Unit = {}, openReport: (String) -> Unit = {},
+    guidedRuns: List<GuidedBatteryRun> = emptyList(), openGuided: (String) -> Unit = {}, open: (String) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = SamiDimens.Page), contentPadding = PaddingValues(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -24,7 +25,15 @@ fun HistoryScreen(worker: Worker, evaluations: List<Evaluation>, enabled: Boolea
                 Text("Actividades guardadas en este teléfono.", style = MaterialTheme.typography.bodyMedium, color = MutedInk)
             }
         }
-        if (evaluations.isEmpty() && cognitiveSessions.isEmpty() && assessments.isEmpty() && reports.isEmpty()) item { InfoCard("AÚN NO HAY ACTIVIDADES", "Aquí aparecerán las actividades que completes.") }
+        if (evaluations.isEmpty() && cognitiveSessions.isEmpty() && assessments.isEmpty() && reports.isEmpty() && guidedRuns.isEmpty()) item { InfoCard("AÚN NO HAY ACTIVIDADES", "Aquí aparecerán las actividades que completes.") }
+        items(guidedRuns, key = { "guided-${it.id}" }) { run ->
+            ReferenceCard {
+                Text(run.definition.name, style = MaterialTheme.typography.titleMedium)
+                Text("Versión ${run.definition.version} · ${formatDate(run.startedAtMillis)} · ${run.shift.label}")
+                Text(dev.studios.samimine.ui.screens.cognitive.runStatus(run.status))
+                TextButton({ openGuided(run.id) }, enabled = enabled) { Text("Ver batería y resultados") }
+            }
+        }
         items(assessments, key = { "assessment-${it.id}" }) { parent ->
             ReferenceCard {
                 Text("Recorrido breve · KSS → PVT", style = MaterialTheme.typography.titleMedium)

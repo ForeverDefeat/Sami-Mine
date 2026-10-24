@@ -62,8 +62,8 @@ fun QuestionnaireScreen(definition: InstrumentDefinition, brief: Boolean, enable
 }
 
 @Composable
-fun SelfReportResultScreen(report: SelfReport, fromHistory: Boolean, finish: () -> Unit) {
-    ActionPage(scrollKey = report.id, action = { PrimaryAction(if (fromHistory) "Volver al historial" else "Volver a cuestionarios", onClick = finish) }) {
+fun SelfReportResultScreen(report: SelfReport, fromHistory: Boolean, returnLabel: String = "Volver a cuestionarios", finish: () -> Unit) {
+    ActionPage(scrollKey = report.id, action = { PrimaryAction(if (fromHistory) "Volver al historial" else returnLabel, onClick = finish) }) {
         DemoLabel()
         Text(report.instrumentId.label, style = MaterialTheme.typography.headlineMedium)
         Text(if (report.omitted) "Respuesta omitida" else "Respuestas guardadas", style = MaterialTheme.typography.titleLarge)

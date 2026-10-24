@@ -53,8 +53,16 @@ class OfflineFlowTest {
 
     @Test fun completeOfflineAndReadSavedResultInHistory() {
         begin()
-        // Allow three real timeout windows to verify draw-bound onset and automatic omissions.
-        compose.waitUntil(35_000) { compose.onAllNodesWithText("Demostración completada").fetchSemanticsNodes().isNotEmpty() }
+        // Each real timeout stores an omission but cannot advance without confirmation.
+        repeat(3) { index ->
+            val label = if (index == 2) "Ver resultado" else "Continuar prueba"
+            compose.waitUntil(15_000) { compose.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
+            compose.mainClock.advanceTimeBy(10_000)
+            compose.onNodeWithText("${index + 1} / 3").assertExists()
+            compose.onNodeWithText("Demostración completada").assertDoesNotExist()
+            compose.onNodeWithText(label).performClick()
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Demostración completada").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Sin datos").assertExists()
         compose.onNodeWithText("Respuestas: 0\nToques antes de la señal: 0\nSeñales que no alcanzaste a tocar: 3").assertExists()
         compose.onNodeWithText("Volver al inicio").assertIsDisplayed().performClick()

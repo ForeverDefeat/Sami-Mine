@@ -43,7 +43,11 @@ fun CognitiveInstructionsScreen(type: CognitiveTestType, back: () -> Unit, pract
         Text(type.displayName(), style = MaterialTheme.typography.headlineMedium)
         Text(instructions.first, style = MaterialTheme.typography.titleLarge)
         Text(instructions.second, style = MaterialTheme.typography.bodyLarge, color = MutedInk)
-        if (type in setOf(CognitiveTestType.FLANKER, CognitiveTestType.GO_NO_GO)) Text("Tienes hasta 3 segundos para responder. Luego aparecerá la siguiente figura.", style = MaterialTheme.typography.bodyMedium, color = MutedInk)
+        if (type in setOf(CognitiveTestType.FLANKER, CognitiveTestType.GO_NO_GO)) Text("Tienes hasta 3 segundos para responder.", style = MaterialTheme.typography.bodyMedium, color = MutedInk)
+        Text(if (type == CognitiveTestType.DSST) "Al terminar el tiempo, pulsa Ver resultado."
+            else "Si no respondes a tiempo, la prueba esperará que pulses Continuar prueba."
+                + if (type == CognitiveTestType.GO_NO_GO) " Ante el cuadrado, esperar sin tocar sigue siendo correcto." else "",
+            style = MaterialTheme.typography.bodyMedium, color = MutedInk)
         ReferenceCard {
             instructions.third.forEachIndexed { index, step ->
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -136,12 +140,23 @@ fun CognitiveRunScreen(
     answer: (String, Long) -> Unit,
     seed: Long = 0,
     stimulusVisible: Boolean = true,
+    continueTest: () -> Unit = {},
 ) {
     val gate = remember { ContactGate() }
     Column(Modifier.fillMaxSize().observeContacts(gate).padding(horizontal = SamiDimens.Page, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         SegmentedProgress(2, description = "Ejecución, etapa 2 de 3")
         DemoLabel()
         Text(if (type == CognitiveTestType.DSST) "${type.displayName()} · 60 segundos" else "${type.displayName()} · $scoredPosition/$scoredTotal", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        if (phase == CognitivePhase.AWAITING_CONTINUE || phase == CognitivePhase.AWAITING_FINISH) {
+            Spacer(Modifier.weight(1f))
+            Text(if (phase == CognitivePhase.AWAITING_FINISH) "El tiempo de la prueba ha terminado." else "No se registró una respuesta a tiempo. Se guardó como omisión.",
+                style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            Spacer(Modifier.weight(1f))
+            Button(onClick = continueTest, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                Text(if (phase == CognitivePhase.AWAITING_FINISH || scoredPosition == scoredTotal) "Ver resultado" else "Continuar prueba")
+            }
+            return@Column
+        }
         if (type == CognitiveTestType.DSST) SymbolKey(seed)
         if (phase == CognitivePhase.REFERENCE) {
             Text("Recuerda este símbolo inicial", style = MaterialTheme.typography.bodyMedium)

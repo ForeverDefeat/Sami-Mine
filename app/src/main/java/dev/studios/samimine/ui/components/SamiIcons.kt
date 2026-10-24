@@ -84,6 +84,12 @@ object SamiIcons {
         moveTo(3f, 3f); lineTo(15f, 3f); lineTo(15f, 15f); lineTo(3f, 15f); close()
         moveTo(9f, 18f); lineTo(9f, 21f); lineTo(21f, 21f); lineTo(21f, 9f); lineTo(18f, 9f)
     }
+    val Guidance = outline("Recomendaciones") {
+        moveTo(8f, 16f); curveTo(8f, 12f, 5f, 12f, 5f, 8f)
+        curveTo(5f, 0f, 19f, 0f, 19f, 8f); curveTo(19f, 12f, 16f, 12f, 16f, 16f)
+        lineTo(8f, 16f); close()
+        moveTo(9f, 19f); lineTo(15f, 19f); moveTo(10f, 22f); lineTo(14f, 22f)
+    }
     // Catalog only: the reference uses this in ALERTA, which is ambiguous. Not a demo result icon.
     val Check = outline("Verificación de referencia") {
         moveTo(5f, 12f); lineTo(10f, 17f); lineTo(20f, 7f)
