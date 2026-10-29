@@ -36,7 +36,8 @@ class WorkerNavigationTest {
         compose.onNodeWithText("Volver al catálogo").performClick()
         compose.onNodeWithTag("tab-QUESTIONNAIRES").assertIsSelected()
         compose.onNodeWithTag("tab-RECOMMENDATIONS").performClick().assertIsSelected()
-        compose.onNodeWithText("Antes de las pruebas").assertExists()
+        compose.onNodeWithText("Consejos para tu evaluación").performScrollTo().performClick()
+        compose.onNodeWithText("Antes de las pruebas").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Bienestar durante el turno").performScrollTo().assertIsDisplayed()
         pressBack()
         compose.onNodeWithTag("tab-HOME").assertIsSelected()
@@ -58,6 +59,26 @@ class WorkerNavigationTest {
         compose.onNodeWithText("Cambiar perfil").performClick()
         compose.onNodeWithText("Usar Alex").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("tab-HOME").assertDoesNotExist()
+    }
+
+    @Test fun exerciseBackNavigationAndLeavingTabDiscardTheSession() {
+        begin()
+        compose.onNodeWithTag("tab-RECOMMENDATIONS").performClick()
+        compose.onNodeWithTag("exercise-gentle-breathing").performScrollTo().performClick()
+        compose.onNodeWithTag("exercise-start").performScrollTo().performClick()
+        compose.onNodeWithText("Pausar").performScrollTo().assertIsDisplayed()
+        pressBack()
+        compose.onNodeWithTag("exercise-start").performScrollTo().assertIsDisplayed()
+        pressBack()
+        compose.onNodeWithText("Una pausa para ti").assertExists()
+        compose.onNodeWithTag("exercise-gentle-breathing").performScrollTo().performClick()
+        compose.onNodeWithTag("exercise-start").performScrollTo().performClick()
+        compose.onNodeWithTag("tab-HOME").performClick()
+        compose.onNodeWithTag("tab-RECOMMENDATIONS").performClick()
+        compose.onNodeWithText("Una pausa para ti").assertExists()
+        compose.onNodeWithText("Pausar").assertDoesNotExist()
+        pressBack()
+        compose.onNodeWithTag("tab-HOME").assertIsSelected()
     }
 
     @Test fun tabSwitchPreservesScrollAndNewShiftResetsIt() {
