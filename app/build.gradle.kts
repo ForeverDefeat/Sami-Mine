@@ -88,6 +88,8 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+    // Cifrado de las bases Room; el AAR incluye sus propias reglas de R8.
+    implementation(libs.sqlcipher.android)
     testImplementation(libs.kotlinx.coroutines.test)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

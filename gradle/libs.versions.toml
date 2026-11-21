@@ -5,6 +5,8 @@ googleServices = "4.5.0"
 # BoM 35.0.2 Authentication requires Kotlin 2.4 metadata; keep the current Kotlin 2.2 toolchain.
 firebaseBom = "34.19.0"
 room = "2.8.4"
+# SQLCipher 4.20.0 is built against Kotlin 2.2.10, matching the current toolchain.
+sqlcipher = "4.20.0"
 ksp = "2.3.9"
 coroutines = "1.10.2"
 agp = "9.4.1"
@@ -29,6 +31,7 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+sqlcipher-android = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipher" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

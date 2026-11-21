@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 o anterior. Ver data_extraction_rules.xml: la clave de Keystore no se respalda. -->
 <full-backup-content>
     <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
 </full-backup-content>
