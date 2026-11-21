@@ -6,6 +6,8 @@ import android.net.NetworkCapabilities
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.*
 import com.google.gson.Gson
+import dev.studios.samimine.data.local.security.LocalCipher
+import java.security.GeneralSecurityException
 import dev.studios.samimine.domain.model.*
 import dev.studios.samimine.domain.repository.*
 import kotlinx.coroutines.tasks.await
@@ -47,19 +49,36 @@ fun DocumentSnapshot.toProfile(): UserProfile {
         getString("area") ?: "", getString("employment") ?: "", getString("wellbeingUid"))
 }
 
-/** Only a previously verified worker profile is cached. Passwords/tokens belong to Firebase Auth. */
-class WorkerSessionCache(context: Context) {
+/**
+ * Only a previously verified worker profile is cached. Passwords/tokens belong to Firebase Auth.
+ * The profile JSON is stored encrypted with [LocalCipher] (AES-GCM, key in Android Keystore).
+ */
+class WorkerSessionCache(context: Context, private val cipher: LocalCipher) {
     private val preferences = context.getSharedPreferences("verified-worker", Context.MODE_PRIVATE)
     private val gson = Gson()
     fun save(profile: UserProfile) {
-        if (profile.role == UserRole.WORKER) preferences.edit().putString("profile", gson.toJson(profile)).commit()
-        else clear()
+        if (profile.role != UserRole.WORKER) return clear()
+        val sealed = cipher.encrypt(gson.toJson(profile).toByteArray(Charsets.UTF_8))
+        preferences.edit().putString(PROFILE, sealed).commit()
     }
-    fun restore(uid: String): UserProfile? = runCatching {
-        gson.fromJson(preferences.getString("profile", null), UserProfile::class.java)
-            ?.takeIf { it.uid == uid && it.role == UserRole.WORKER && it.active }
-    }.getOrNull()
+    fun restore(uid: String): UserProfile? {
+        val stored = preferences.getString(PROFILE, null) ?: return null
+        // Earlier versions stored plaintext JSON: read it once and re-save it encrypted.
+        val legacy = stored.startsWith("{")
+        val json = if (legacy) stored else try {
+            String(cipher.decrypt(stored), Charsets.UTF_8)
+        } catch (error: GeneralSecurityException) {
+            // Unreadable or tampered cache: discard it; the worker verifies again online.
+            clear()
+            return null
+        }
+        val cached = runCatching { gson.fromJson(json, UserProfile::class.java) }.getOrNull()
+        if (legacy) cached?.let(::save) ?: clear()
+        return cached?.takeIf { it.uid == uid && it.role == UserRole.WORKER && it.active }
+    }
     fun clear() { preferences.edit().clear().commit() }
+
+    private companion object { const val PROFILE = "profile" }
 }
 
 fun Context.isOnline(): Boolean {
